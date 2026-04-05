@@ -1,4 +1,4 @@
-const pool = require('../db/pool');
+const { poolIkm: pool } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
 
 /* ── Shared helpers ─────────────────────────────────────────────── */
@@ -26,9 +26,9 @@ const getWorkDate = () => {
 };
 
 /* ── Location constants ─────────────────────────────────────────── */
-const OFFICE_LAT      = -6.2333012;
-const OFFICE_LNG      = 106.8987867;
-const MAX_DIST_METERS = 200;
+const OFFICE_LAT = -6.3983239;
+const OFFICE_LNG = 106.8997063;
+const MAX_DIST_M = 200;
 
 function haversineMeters(lat1, lon1, lat2, lon2) {
   const R     = 6371000;
@@ -106,9 +106,9 @@ const shiftPunch = async (req, res, next) => {
       return errorResponse(res, 'Lokasi tidak tersedia. Aktifkan GPS dan izinkan akses lokasi.', 400);
 
     const dist = haversineMeters(parseFloat(lat), parseFloat(lng), OFFICE_LAT, OFFICE_LNG);
-    if (dist > MAX_DIST_METERS)
+    if (dist > MAX_DIST_M)
       return errorResponse(res,
-        `Anda berada ${Math.round(dist)} meter dari lokasi absensi. Maksimal ${MAX_DIST_METERS} meter.`, 400);
+        `Anda berada ${Math.round(dist)} meter dari lokasi absensi. Maksimal ${MAX_DIST_M} meter.`, 400);
 
     /* Time-window validation */
     if (!isInShiftWindow(shift_type, punch_type)) {
@@ -174,17 +174,22 @@ const history = async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT
-         ts.work_date            AS attendance_date,
-         MIN(ts.check_in_time)   AS check_in_time,
-         MAX(ts.check_out_time)  AS check_out_time,
-         me.employee_code,
-         me.full_name
-       FROM tr_attendance_shift_ikm ts
-       INNER JOIN mst_employee me ON me.employee_id = ts.employee_id
-       WHERE ts.employee_id = ?
-       GROUP BY ts.work_date, me.employee_code, me.full_name
-       ORDER BY ts.work_date DESC
-       LIMIT 30`,
+         work_date AS attendance_date,
+         MAX(CASE WHEN shift_type='pagi'   THEN check_in_time  END) AS pagi_in,
+         MAX(CASE WHEN shift_type='pagi'   THEN check_out_time END) AS pagi_out,
+         MAX(CASE WHEN shift_type='siang'  THEN check_in_time  END) AS siang_in,
+         MAX(CASE WHEN shift_type='siang'  THEN check_out_time END) AS siang_out,
+         MAX(CASE WHEN shift_type='sore'   THEN check_in_time  END) AS sore_in,
+         MAX(CASE WHEN shift_type='sore'   THEN check_out_time END) AS sore_out,
+         MAX(CASE WHEN shift_type='lembur' THEN check_in_time  END) AS lembur_in,
+         MAX(CASE WHEN shift_type='lembur' THEN check_out_time END) AS lembur_out,
+         MIN(check_in_time)  AS check_in_time,
+         MAX(check_out_time) AS check_out_time
+       FROM tr_attendance_shift_ikm
+       WHERE employee_id = ?
+       GROUP BY work_date
+       ORDER BY work_date DESC
+       LIMIT 90`,
       [employeeId]
     );
 

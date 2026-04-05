@@ -1,14 +1,14 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const pool = require('../db/pool');
+const { pool } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
 
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
 
-    if (!email || !password) {
-      return errorResponse(res, 'Email dan password wajib diisi', 400);
+    if (!username || !password) {
+      return errorResponse(res, 'Username dan password wajib diisi', 400);
     }
 
     const [rows] = await pool.query(
@@ -29,20 +29,20 @@ const login = async (req, res, next) => {
         me.is_deleted
       FROM users u
       LEFT JOIN mst_employee me ON me.employee_id = u.id
-      WHERE u.email = ?
+      WHERE u.username = ?
       LIMIT 1`,
-      [email]
+      [username]
     );
 
     if (rows.length === 0) {
-      return errorResponse(res, 'Email atau password salah', 401);
+      return errorResponse(res, 'Username atau password salah', 401);
     }
 
     const user = rows[0];
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return errorResponse(res, 'Email atau password salah', 401);
+      return errorResponse(res, 'Username atau password salah', 401);
     }
 
     if (!user.employee_id) {
