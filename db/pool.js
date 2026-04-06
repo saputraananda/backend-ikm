@@ -62,6 +62,7 @@ const pool = wrapPoolWithRetry(mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   dateStrings: true,
+  timezone: '+07:00',
   connectTimeout: 30000,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000
@@ -77,6 +78,7 @@ const poolIkm = wrapPoolWithRetry(mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0,
   dateStrings: true,
+  timezone: '+07:00',
   connectTimeout: 30000,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000
