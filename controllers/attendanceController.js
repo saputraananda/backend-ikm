@@ -28,6 +28,8 @@ const getWorkDate = () => {
 /* ── Location constants ─────────────────────────────────────────── */
 const OFFICE_LAT = -6.3983239;
 const OFFICE_LNG = 106.8997063;
+const OFFICE_LAT_2 = -6.3848079;
+const OFFICE_LNG_2 = 106.8997077;
 const MAX_DIST_M = 200;
 
 function haversineMeters(lat1, lon1, lat2, lon2) {
@@ -105,7 +107,9 @@ const shiftPunch = async (req, res, next) => {
     if (lat == null || lng == null)
       return errorResponse(res, 'Lokasi tidak tersedia. Aktifkan GPS dan izinkan akses lokasi.', 400);
 
-    const dist = haversineMeters(parseFloat(lat), parseFloat(lng), OFFICE_LAT, OFFICE_LNG);
+    const dist1 = haversineMeters(parseFloat(lat), parseFloat(lng), OFFICE_LAT, OFFICE_LNG);
+    const dist2 = haversineMeters(parseFloat(lat), parseFloat(lng), OFFICE_LAT_2, OFFICE_LNG_2);
+    const dist = Math.min(dist1, dist2);
     if (dist > MAX_DIST_M)
       return errorResponse(res,
         `Anda berada ${Math.round(dist)} meter dari lokasi absensi. Maksimal ${MAX_DIST_M} meter.`, 400);
