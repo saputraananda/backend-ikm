@@ -63,6 +63,36 @@ function isInShiftWindow(shiftType, punchType) {
 
 const SHIFT_LABELS = { pagi: 'Pagi', siang: 'Siang', sore: 'Sore', lembur: 'Lembur' };
 
+const buildPhotoUrl = (req, photoPath, photoName) => {
+  if (!photoPath || !photoName) return null;
+  const normalizedPath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+  return `${req.protocol}://${req.get('host')}${normalizedPath}/${encodeURIComponent(photoName)}`;
+};
+
+/* ── Optional photo columns (safe across DB variants) ────────────── */
+const _colCache = new Map();
+async function hasColumn(tableName, colName) {
+  const key = `${tableName}.${colName}`;
+  if (_colCache.has(key)) return _colCache.get(key);
+  try {
+    const [rows] = await pool.query(
+      `SELECT 1 AS ok
+       FROM information_schema.columns
+       WHERE table_schema = DATABASE()
+         AND table_name = ?
+         AND column_name = ?
+       LIMIT 1`,
+      [tableName, colName]
+    );
+    const ok = rows.length > 0;
+    _colCache.set(key, ok);
+    return ok;
+  } catch (_) {
+    _colCache.set(key, false);
+    return false;
+  }
+}
+
 /* ══════════════════════════════════════════════════════════════════
    GET /attendance/today-shifts
    Returns shift records for today keyed by shift_type.
@@ -72,16 +102,39 @@ const getTodayShifts = async (req, res, next) => {
     const employeeId = req.user.employee_id;
     const workDate   = getWorkDate();
 
+    const canInPhotoPath = await hasColumn('tr_attendance_shift_ikm', 'check_in_photo_path');
+    const canInPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_in_photo_name');
+    const canOutPhotoPath = await hasColumn('tr_attendance_shift_ikm', 'check_out_photo_path');
+    const canOutPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_out_photo_name');
+
+    const selectCols = [
+      'shift_type',
+      'check_in_time',
+      'check_out_time',
+      'check_in_lat',
+      'check_in_lng',
+      'check_out_lat',
+      'check_out_lng'
+    ];
+
+    if (canInPhotoPath) selectCols.push('check_in_photo_path');
+    if (canInPhotoName) selectCols.push('check_in_photo_name');
+    if (canOutPhotoPath) selectCols.push('check_out_photo_path');
+    if (canOutPhotoName) selectCols.push('check_out_photo_name');
+
     const [rows] = await pool.query(
-      `SELECT shift_type, check_in_time, check_out_time,
-              check_in_lat, check_in_lng, check_out_lat, check_out_lng
+      `SELECT ${selectCols.join(', ')}
        FROM tr_attendance_shift_ikm
        WHERE employee_id = ? AND work_date = ?`,
       [employeeId, workDate]
     );
 
     const result = {};
-    for (const row of rows) result[row.shift_type] = row;
+    for (const row of rows) {
+      row.check_in_photo_url = buildPhotoUrl(req, row.check_in_photo_path, row.check_in_photo_name);
+      row.check_out_photo_url = buildPhotoUrl(req, row.check_out_photo_path, row.check_out_photo_name);
+      result[row.shift_type] = row;
+    }
     return successResponse(res, 'Data shift hari ini', result);
   } catch (error) { next(error); }
 };
@@ -95,7 +148,7 @@ const shiftPunch = async (req, res, next) => {
   try {
     const userId     = req.user.user_id;
     const employeeId = req.user.employee_id;
-    const { shift_type, punch_type, lat, lng } = req.body;
+    const { shift_type, punch_type, lat, lng, photo_path, photo_name } = req.body;
 
     /* Input validation */
     const validShifts = ['pagi', 'siang', 'sore', 'lembur'];
@@ -133,20 +186,40 @@ const shiftPunch = async (req, res, next) => {
       if (rows.length > 0 && rows[0].check_in_time)
         return errorResponse(res, `Anda sudah absen masuk shift ${SHIFT_LABELS[shift_type]}.`, 400);
 
+      const canInPhotoPath = await hasColumn('tr_attendance_shift_ikm', 'check_in_photo_path');
+      const canInPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_in_photo_name');
       if (rows.length === 0) {
-        await pool.query(
-          `INSERT INTO tr_attendance_shift_ikm
-           (user_id, employee_id, work_date, shift_type, check_in_time, check_in_lat, check_in_lng)
-           VALUES (?, ?, ?, ?, NOW(), ?, ?)`,
-          [userId, employeeId, workDate, shift_type, lat, lng]
-        );
+        if (canInPhotoPath && canInPhotoName) {
+          await pool.query(
+            `INSERT INTO tr_attendance_shift_ikm
+             (user_id, employee_id, work_date, shift_type, check_in_time, check_in_lat, check_in_lng, check_in_photo_path, check_in_photo_name)
+             VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
+            [userId, employeeId, workDate, shift_type, lat, lng, photo_path || null, photo_name || null]
+          );
+        } else {
+          await pool.query(
+            `INSERT INTO tr_attendance_shift_ikm
+             (user_id, employee_id, work_date, shift_type, check_in_time, check_in_lat, check_in_lng)
+             VALUES (?, ?, ?, ?, NOW(), ?, ?)`,
+            [userId, employeeId, workDate, shift_type, lat, lng]
+          );
+        }
       } else {
-        await pool.query(
-          `UPDATE tr_attendance_shift_ikm
-           SET user_id=?, check_in_time=NOW(), check_in_lat=?, check_in_lng=?
-           WHERE employee_id=? AND work_date=? AND shift_type=?`,
-          [userId, lat, lng, employeeId, workDate, shift_type]
-        );
+        if (canInPhotoPath && canInPhotoName) {
+          await pool.query(
+            `UPDATE tr_attendance_shift_ikm
+             SET user_id=?, check_in_time=NOW(), check_in_lat=?, check_in_lng=?, check_in_photo_path=?, check_in_photo_name=?
+             WHERE employee_id=? AND work_date=? AND shift_type=?`,
+            [userId, lat, lng, photo_path || null, photo_name || null, employeeId, workDate, shift_type]
+          );
+        } else {
+          await pool.query(
+            `UPDATE tr_attendance_shift_ikm
+             SET user_id=?, check_in_time=NOW(), check_in_lat=?, check_in_lng=?
+             WHERE employee_id=? AND work_date=? AND shift_type=?`,
+            [userId, lat, lng, employeeId, workDate, shift_type]
+          );
+        }
       }
       return successResponse(res, `Absen masuk shift ${SHIFT_LABELS[shift_type]} berhasil`);
 
@@ -156,14 +229,40 @@ const shiftPunch = async (req, res, next) => {
       if (rows[0].check_out_time)
         return errorResponse(res, `Anda sudah absen keluar shift ${SHIFT_LABELS[shift_type]}.`, 400);
 
-      await pool.query(
-        `UPDATE tr_attendance_shift_ikm
-         SET check_out_time=NOW(), check_out_lat=?, check_out_lng=?
-         WHERE employee_id=? AND work_date=? AND shift_type=?`,
-        [lat, lng, employeeId, workDate, shift_type]
-      );
+      const canOutPhotoPath = await hasColumn('tr_attendance_shift_ikm', 'check_out_photo_path');
+      const canOutPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_out_photo_name');
+      if (canOutPhotoPath && canOutPhotoName) {
+        await pool.query(
+          `UPDATE tr_attendance_shift_ikm
+           SET check_out_time=NOW(), check_out_lat=?, check_out_lng=?, check_out_photo_path=?, check_out_photo_name=?
+           WHERE employee_id=? AND work_date=? AND shift_type=?`,
+          [lat, lng, photo_path || null, photo_name || null, employeeId, workDate, shift_type]
+        );
+      } else {
+        await pool.query(
+          `UPDATE tr_attendance_shift_ikm
+           SET check_out_time=NOW(), check_out_lat=?, check_out_lng=?
+           WHERE employee_id=? AND work_date=? AND shift_type=?`,
+          [lat, lng, employeeId, workDate, shift_type]
+        );
+      }
       return successResponse(res, `Absen keluar shift ${SHIFT_LABELS[shift_type]} berhasil`);
     }
+  } catch (error) { next(error); }
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   POST /attendance/shift-punch-selfie (multipart/form-data)
+   Fields: shift_type, punch_type, lat, lng, selfie(file)
+══════════════════════════════════════════════════════════════════ */
+const shiftPunchSelfie = async (req, res, next) => {
+  try {
+    if (!req.file) return errorResponse(res, 'Foto selfie wajib diambil dari kamera.', 400);
+
+    const photo_path = '/storage/buktiabsen';
+    const photo_name = req.file.filename;
+    req.body = { ...req.body, photo_path, photo_name };
+    return shiftPunch(req, res, next);
   } catch (error) { next(error); }
 };
 
@@ -201,4 +300,4 @@ const history = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-module.exports = { getTodayShifts, shiftPunch, history };
+module.exports = { getTodayShifts, shiftPunch, shiftPunchSelfie, history };
