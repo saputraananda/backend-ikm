@@ -2,16 +2,34 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 
-function resolveUploadBaseDir() {
-  // Read from env so path doesn't get published in code.
-  // - production: set absolute path in .env / env vars
-  // - development: can be relative (resolved from backend root)
+function resolveStorageBaseDir() {
   const raw = process.env.UPLOAD_BASE_DIR;
-  if (!raw) return path.join(__dirname, '..', 'assets', 'buktiabsen');
+  if (!raw) return path.join(__dirname, '..', 'assets');
   return path.isAbsolute(raw) ? raw : path.join(__dirname, '..', raw);
 }
 
-const UPLOAD_BASE_DIR = resolveUploadBaseDir();
+const STORAGE_BASE_DIR = resolveStorageBaseDir();
+
+// Add new upload folders here when new image upload features are introduced.
+const UPLOAD_FOLDERS = Object.freeze({
+  attendanceProof: {
+    subDir: 'buktiabsen',
+    publicPath: '/storage/buktiabsen'
+  }
+});
+
+function resolveUploadTarget(key) {
+  const target = UPLOAD_FOLDERS[key];
+  if (!target) throw new Error(`Unknown upload target: ${key}`);
+  return {
+    ...target,
+    absoluteDir: path.join(STORAGE_BASE_DIR, target.subDir)
+  };
+}
+
+const attendanceUploadTarget = resolveUploadTarget('attendanceProof');
+const ATTENDANCE_UPLOAD_DIR = attendanceUploadTarget.absoluteDir;
+const ATTENDANCE_UPLOAD_PUBLIC_PATH = attendanceUploadTarget.publicPath;
 
 function ensureDir(dir) {
   try {
@@ -21,12 +39,12 @@ function ensureDir(dir) {
   }
 }
 
-ensureDir(UPLOAD_BASE_DIR);
+ensureDir(ATTENDANCE_UPLOAD_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    ensureDir(UPLOAD_BASE_DIR);
-    cb(null, UPLOAD_BASE_DIR);
+    ensureDir(ATTENDANCE_UPLOAD_DIR);
+    cb(null, ATTENDANCE_UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
     const safe = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
@@ -51,5 +69,11 @@ const uploadSelfie = multer({
   limits: { fileSize: 6 * 1024 * 1024 } // 6MB
 });
 
-module.exports = { UPLOAD_BASE_DIR, uploadSelfie };
+module.exports = {
+  STORAGE_BASE_DIR,
+  UPLOAD_FOLDERS,
+  ATTENDANCE_UPLOAD_DIR,
+  ATTENDANCE_UPLOAD_PUBLIC_PATH,
+  uploadSelfie
+};
 

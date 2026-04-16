@@ -11,7 +11,7 @@ const morgan = require('morgan');
 const authRoutes = require('./routes/authRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const errorMiddleware = require('./middleware/errorMiddleware');
-const { UPLOAD_BASE_DIR } = require('./middleware/upload');
+const { ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH } = require('./middleware/upload');
 
 const app = express();
 
@@ -28,7 +28,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Expose uploaded selfie proofs (for both local/prod base dir)
-app.use('/storage/buktiabsen', express.static(UPLOAD_BASE_DIR));
+app.use(ATTENDANCE_UPLOAD_PUBLIC_PATH, express.static(ATTENDANCE_UPLOAD_DIR));
 
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'OK LANJOTT' });

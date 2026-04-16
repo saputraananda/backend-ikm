@@ -1,5 +1,6 @@
 const { poolIkm: pool } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
+const { ATTENDANCE_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
 
 /* ── Shared helpers ─────────────────────────────────────────────── */
 const getTodayDate = () => {
@@ -259,7 +260,7 @@ const shiftPunchSelfie = async (req, res, next) => {
   try {
     if (!req.file) return errorResponse(res, 'Foto selfie wajib diambil dari kamera.', 400);
 
-    const photo_path = '/storage/buktiabsen';
+    const photo_path = ATTENDANCE_UPLOAD_PUBLIC_PATH;
     const photo_name = req.file.filename;
     req.body = { ...req.body, photo_path, photo_name };
     return shiftPunch(req, res, next);
