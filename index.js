@@ -10,6 +10,8 @@ const morgan = require('morgan');
 
 const authRoutes = require('./routes/authRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const valetRoutes = require('./routes/valetRoutes');
+const historyRoutes = require('./routes/historyRoutes');
 const errorMiddleware = require('./middleware/errorMiddleware');
 const { ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH } = require('./middleware/upload');
 
@@ -36,6 +38,8 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/valet', valetRoutes);
+app.use('/api/history', historyRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Not Found' });

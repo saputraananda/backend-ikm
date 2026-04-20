@@ -1,6 +1,6 @@
 const express        = require('express');
 const router         = express.Router();
-const ctrl           = require('../controllers/attendanceController');
+const ctrl           = require('../controllers/valetController');
 const authMiddleware = require('../middleware/authMiddleware');
 const { uploadSelfie } = require('../middleware/upload');
 
@@ -9,6 +9,6 @@ router.use(authMiddleware);
 router.get('/today-shifts',  ctrl.getTodayShifts);
 router.post('/shift-punch',  ctrl.shiftPunch);
 router.post('/shift-punch-selfie', uploadSelfie.single('selfie'), ctrl.shiftPunchSelfie);
-router.get('/check-cross',  ctrl.checkCross);
+router.get('/history',       ctrl.history);
 
 module.exports = router;
