@@ -15,6 +15,10 @@ const UPLOAD_FOLDERS = Object.freeze({
   attendanceProof: {
     subDir: 'buktiabsen',
     publicPath: '/storage/buktiabsen'
+  },
+  doctorNote: {
+    subDir: 'suratketerangan',
+    publicPath: '/storage/suratketerangan'
   }
 });
 
@@ -31,6 +35,10 @@ const attendanceUploadTarget = resolveUploadTarget('attendanceProof');
 const ATTENDANCE_UPLOAD_DIR = attendanceUploadTarget.absoluteDir;
 const ATTENDANCE_UPLOAD_PUBLIC_PATH = attendanceUploadTarget.publicPath;
 
+const leaveUploadTarget = resolveUploadTarget('doctorNote');
+const LEAVE_UPLOAD_DIR = leaveUploadTarget.absoluteDir;
+const LEAVE_UPLOAD_PUBLIC_PATH = leaveUploadTarget.publicPath;
+
 function ensureDir(dir) {
   try {
     fs.mkdirSync(dir, { recursive: true });
@@ -40,6 +48,7 @@ function ensureDir(dir) {
 }
 
 ensureDir(ATTENDANCE_UPLOAD_DIR);
+ensureDir(LEAVE_UPLOAD_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -69,11 +78,35 @@ const uploadSelfie = multer({
   limits: { fileSize: 6 * 1024 * 1024 } // 6MB
 });
 
+/* ── Doctor note upload (leave/permit) ──────────────────────────── */
+const leaveStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    ensureDir(LEAVE_UPLOAD_DIR);
+    cb(null, LEAVE_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const safe = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    const employeeId = safe(req.user?.employee_id || 'unknown');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    cb(null, `surat_${employeeId}_${ts}${ext}`);
+  }
+});
+
+const uploadDoctorNote = multer({
+  storage: leaveStorage,
+  fileFilter,
+  limits: { fileSize: 8 * 1024 * 1024 } // 8MB
+});
+
 module.exports = {
   STORAGE_BASE_DIR,
   UPLOAD_FOLDERS,
   ATTENDANCE_UPLOAD_DIR,
   ATTENDANCE_UPLOAD_PUBLIC_PATH,
-  uploadSelfie
+  LEAVE_UPLOAD_DIR,
+  LEAVE_UPLOAD_PUBLIC_PATH,
+  uploadSelfie,
+  uploadDoctorNote
 };
 
