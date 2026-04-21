@@ -19,6 +19,10 @@ const UPLOAD_FOLDERS = Object.freeze({
   doctorNote: {
     subDir: 'suratketerangan',
     publicPath: '/storage/suratketerangan'
+  },
+  linenAttachment: {
+    subDir: 'linenreport',
+    publicPath: '/storage/linenreport'
   }
 });
 
@@ -39,6 +43,10 @@ const leaveUploadTarget = resolveUploadTarget('doctorNote');
 const LEAVE_UPLOAD_DIR = leaveUploadTarget.absoluteDir;
 const LEAVE_UPLOAD_PUBLIC_PATH = leaveUploadTarget.publicPath;
 
+const linenUploadTarget = resolveUploadTarget('linenAttachment');
+const LINEN_UPLOAD_DIR = linenUploadTarget.absoluteDir;
+const LINEN_UPLOAD_PUBLIC_PATH = linenUploadTarget.publicPath;
+
 function ensureDir(dir) {
   try {
     fs.mkdirSync(dir, { recursive: true });
@@ -49,6 +57,7 @@ function ensureDir(dir) {
 
 ensureDir(ATTENDANCE_UPLOAD_DIR);
 ensureDir(LEAVE_UPLOAD_DIR);
+ensureDir(LINEN_UPLOAD_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -99,6 +108,27 @@ const uploadDoctorNote = multer({
   limits: { fileSize: 8 * 1024 * 1024 } // 8MB
 });
 
+/* ── Linen report attachment upload ──────────────────────────────── */
+const linenStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    ensureDir(LINEN_UPLOAD_DIR);
+    cb(null, LINEN_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const safe = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    const employeeId = safe(req.user?.employee_id || 'unknown');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    cb(null, `linen_${employeeId}_${ts}${ext}`);
+  }
+});
+
+const uploadLinenAttachment = multer({
+  storage: linenStorage,
+  fileFilter,
+  limits: { fileSize: 8 * 1024 * 1024 } // 8MB
+});
+
 module.exports = {
   STORAGE_BASE_DIR,
   UPLOAD_FOLDERS,
@@ -106,7 +136,10 @@ module.exports = {
   ATTENDANCE_UPLOAD_PUBLIC_PATH,
   LEAVE_UPLOAD_DIR,
   LEAVE_UPLOAD_PUBLIC_PATH,
+  LINEN_UPLOAD_DIR,
+  LINEN_UPLOAD_PUBLIC_PATH,
   uploadSelfie,
-  uploadDoctorNote
+  uploadDoctorNote,
+  uploadLinenAttachment
 };
 

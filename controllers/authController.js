@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { pool } = require('../db/pool');
+const { pool, poolIkm } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
 
 const login = async (req, res, next) => {
@@ -126,7 +126,28 @@ const profile = async (req, res, next) => {
   }
 };
 
+const leaderRole = async (req, res, next) => {
+  try {
+    const employeeId = req.user?.employee_id;
+    if (!employeeId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const [rows] = await poolIkm.query(
+      `SELECT role FROM mst_leader WHERE employee_id = ? LIMIT 1`,
+      [employeeId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(200).json({ success: true, data: { is_leader: false, role: null } });
+    }
+
+    return res.status(200).json({ success: true, data: { is_leader: true, role: rows[0].role } });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   login,
-  profile
+  profile,
+  leaderRole,
 };

@@ -13,8 +13,9 @@ const attendanceRoutes = require('./routes/attendanceRoutes');
 const valetRoutes = require('./routes/valetRoutes');
 const historyRoutes = require('./routes/historyRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
+const linenReportRoutes = require('./routes/linenReportRoutes');
 const errorMiddleware = require('./middleware/errorMiddleware');
-const { ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH, LEAVE_UPLOAD_DIR, LEAVE_UPLOAD_PUBLIC_PATH } = require('./middleware/upload');
+const { ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH, LEAVE_UPLOAD_DIR, LEAVE_UPLOAD_PUBLIC_PATH, LINEN_UPLOAD_DIR, LINEN_UPLOAD_PUBLIC_PATH } = require('./middleware/upload');
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 // Expose uploaded selfie proofs (for both local/prod base dir)
 app.use(ATTENDANCE_UPLOAD_PUBLIC_PATH, express.static(ATTENDANCE_UPLOAD_DIR));
 app.use(LEAVE_UPLOAD_PUBLIC_PATH, express.static(LEAVE_UPLOAD_DIR));
+app.use(LINEN_UPLOAD_PUBLIC_PATH, express.static(LINEN_UPLOAD_DIR));
 
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'OK LANJOTT' });
@@ -43,6 +45,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/valet', valetRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/leave', leaveRoutes);
+app.use('/api/linen-report', linenReportRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Not Found' });
