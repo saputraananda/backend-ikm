@@ -27,11 +27,23 @@ const getWorkDate = () => {
 };
 
 /* ── Location constants ─────────────────────────────────────────── */
-const OFFICE_LAT   = -6.3983239;
-const OFFICE_LNG   = 106.8997063;
-const OFFICE_LAT_2 = -6.3848079;
-const OFFICE_LNG_2 = 106.8997077;
-const MAX_DIST_M   = 200;
+const MAX_DIST_M = 200;
+
+/* ── Office locations from DB (cached 5 min) ───────────────────── */
+let _officeLocations = null;
+let _officeLocationsAt = 0;
+const LOCATION_CACHE_MS = 5 * 60 * 1000;
+
+async function getOfficeLocations() {
+  const now = Date.now();
+  if (_officeLocations && (now - _officeLocationsAt) < LOCATION_CACHE_MS) return _officeLocations;
+  const [rows] = await pool.query(
+    'SELECT location_id, location_name, latitude, longitude FROM mst_location_absen ORDER BY id'
+  );
+  _officeLocations = rows;
+  _officeLocationsAt = now;
+  return rows;
+}
 
 function haversineMeters(lat1, lon1, lat2, lon2) {
   const R     = 6371000;
@@ -44,23 +56,26 @@ function haversineMeters(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/* ── Valet shift time windows (minutes from midnight) ───────────── */
-const VALET_SHIFT_WINDOWS = {
-  pagi: { in: [240,  330],  out: [510,  840]  },   // in 04:00–05:30, out 08:30–14:00
-  sore: { in: [780,  960],  out: 'midnight'   },   // in 13:00–16:00, out 17:00–03:59
-};
+/* ── Shift definitions from DB (cached 5 min) ───────────────────── */
+let _shiftValet = null;
+let _shiftValetAt = 0;
+const SHIFT_VALET_CACHE_MS = 5 * 60 * 1000;
 
-function isInValetShiftWindow(shiftType, punchType) {
-  const now      = new Date();
-  const totalMin = now.getHours() * 60 + now.getMinutes();
-  const win      = VALET_SHIFT_WINDOWS[shiftType];
-  if (!win) return false;
-  if (punchType === 'in') return totalMin >= win.in[0] && totalMin <= win.in[1];
-  if (win.out === 'midnight') return totalMin >= 1020 || totalMin <= 239;
-  return totalMin >= win.out[0] && totalMin <= win.out[1];
+async function getShiftValet() {
+  const now = Date.now();
+  if (_shiftValet && (now - _shiftValetAt) < SHIFT_VALET_CACHE_MS) return _shiftValet;
+  const [rows] = await pool.query(
+    'SELECT shift_name, check_in_start, check_in_end, check_out_start, check_out_end, is_overnight FROM mst_shift_valet ORDER BY id'
+  );
+  _shiftValet = rows;
+  _shiftValetAt = now;
+  return rows;
 }
 
-const SHIFT_LABELS = { pagi: 'Pagi', sore: 'Sore' };
+function timeToMin(timeStr) {
+  const parts = String(timeStr).split(':').map(Number);
+  return parts[0] * 60 + (parts[1] || 0);
+}
 
 const buildPhotoUrl = (req, photoPath, photoName) => {
   if (!photoPath || !photoName) return null;
@@ -149,27 +164,40 @@ const shiftPunch = async (req, res, next) => {
     const { shift_type, punch_type, lat, lng, photo_path, photo_name } = req.body;
 
     /* Input validation */
-    const validShifts = ['pagi', 'sore'];
-    const validPunch  = ['in', 'out'];
-    if (!validShifts.includes(shift_type) || !validPunch.includes(punch_type))
+    const validPunch = ['in', 'out'];
+    if (!validPunch.includes(punch_type))
       return errorResponse(res, 'Parameter tidak valid', 400);
+    const shiftRows = await getShiftValet();
+    const shiftRow  = shiftRows.find(s => s.shift_name.toLowerCase() === String(shift_type).toLowerCase());
+    if (!shiftRow) return errorResponse(res, 'Parameter tidak valid', 400);
 
     /* Location validation */
     if (lat == null || lng == null)
       return errorResponse(res, 'Lokasi tidak tersedia. Aktifkan GPS dan izinkan akses lokasi.', 400);
 
-    const dist1 = haversineMeters(parseFloat(lat), parseFloat(lng), OFFICE_LAT, OFFICE_LNG);
-    const dist2 = haversineMeters(parseFloat(lat), parseFloat(lng), OFFICE_LAT_2, OFFICE_LNG_2);
-    const dist  = Math.min(dist1, dist2);
+    const locations = await getOfficeLocations();
+    let dist = Infinity;
+    for (const loc of locations) {
+      const d = haversineMeters(parseFloat(lat), parseFloat(lng), parseFloat(loc.latitude), parseFloat(loc.longitude));
+      if (d < dist) dist = d;
+    }
     if (dist > MAX_DIST_M)
       return errorResponse(res,
         `Anda berada ${Math.round(dist)} meter dari lokasi absensi. Maksimal ${MAX_DIST_M} meter.`, 400);
 
     /* Time-window validation */
-    if (!isInValetShiftWindow(shift_type, punch_type)) {
-      const label = SHIFT_LABELS[shift_type];
-      const act   = punch_type === 'in' ? 'masuk' : 'keluar';
-      return errorResponse(res, `Bukan waktu absen valet ${label} ${act} saat ini.`, 400);
+    const totalMin = new Date().getHours() * 60 + new Date().getMinutes();
+    let inWindow;
+    if (punch_type === 'in') {
+      inWindow = totalMin >= timeToMin(shiftRow.check_in_start) && totalMin <= timeToMin(shiftRow.check_in_end);
+    } else if (shiftRow.is_overnight) {
+      inWindow = totalMin >= timeToMin(shiftRow.check_out_start) || totalMin <= 239;
+    } else {
+      inWindow = totalMin >= timeToMin(shiftRow.check_out_start) && totalMin <= timeToMin(shiftRow.check_out_end);
+    }
+    if (!inWindow) {
+      const act = punch_type === 'in' ? 'masuk' : 'keluar';
+      return errorResponse(res, `Bukan waktu absen valet ${shiftRow.shift_name} ${act} saat ini.`, 400);
     }
 
     const workDate = getWorkDate();
@@ -182,7 +210,7 @@ const shiftPunch = async (req, res, next) => {
 
     if (punch_type === 'in') {
       if (rows.length > 0 && rows[0].check_in_time)
-        return errorResponse(res, `Anda sudah absen masuk valet shift ${SHIFT_LABELS[shift_type]}.`, 400);
+        return errorResponse(res, `Anda sudah absen masuk valet shift ${shiftRow.shift_name}.`, 400);
 
       const canInPhotoPath = await hasColumn('tr_attendance_shift_ikm', 'check_in_photo_path');
       const canInPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_in_photo_name');
@@ -221,13 +249,13 @@ const shiftPunch = async (req, res, next) => {
           );
         }
       }
-      return successResponse(res, `Absen masuk valet shift ${SHIFT_LABELS[shift_type]} berhasil`);
+      return successResponse(res, `Absen masuk valet shift ${shiftRow.shift_name} berhasil`);
 
     } else {
       if (rows.length === 0 || !rows[0].check_in_time)
-        return errorResponse(res, `Anda belum absen masuk valet shift ${SHIFT_LABELS[shift_type]}.`, 400);
+        return errorResponse(res, `Anda belum absen masuk valet shift ${shiftRow.shift_name}.`, 400);
       if (rows[0].check_out_time)
-        return errorResponse(res, `Anda sudah absen keluar valet shift ${SHIFT_LABELS[shift_type]}.`, 400);
+        return errorResponse(res, `Anda sudah absen keluar valet shift ${shiftRow.shift_name}.`, 400);
 
       const canOutPhotoPath = await hasColumn('tr_attendance_shift_ikm', 'check_out_photo_path');
       const canOutPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_out_photo_name');
@@ -246,7 +274,7 @@ const shiftPunch = async (req, res, next) => {
           [lat, lng, employeeId, workDate, shift_type]
         );
       }
-      return successResponse(res, `Absen keluar valet shift ${SHIFT_LABELS[shift_type]} berhasil`);
+      return successResponse(res, `Absen keluar valet shift ${shiftRow.shift_name} berhasil`);
     }
   } catch (error) { next(error); }
 };

@@ -9,6 +9,8 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const authRoutes = require('./routes/authRoutes');
+const locationRoutes = require('./routes/locationRoutes');
+const shiftRoutes = require('./routes/shiftRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const valetRoutes = require('./routes/valetRoutes');
 const historyRoutes = require('./routes/historyRoutes');
@@ -41,6 +43,8 @@ app.get('/api/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/locations', locationRoutes);
+app.use('/api/shifts', shiftRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/valet', valetRoutes);
 app.use('/api/history', historyRoutes);
