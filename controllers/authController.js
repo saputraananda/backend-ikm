@@ -108,7 +108,8 @@ const profile = async (req, res, next) => {
         me.department_id,
         me.position_id,
         me.join_date,
-        me.profile_path
+        me.profile_path,
+        me.profile_name
       FROM users u
       LEFT JOIN mst_employee me ON me.employee_id = u.id
       WHERE u.id = ?
@@ -120,7 +121,14 @@ const profile = async (req, res, next) => {
       return errorResponse(res, 'User tidak ditemukan', 404);
     }
 
-    return successResponse(res, 'Profile berhasil diambil', rows[0]);
+    const row = rows[0];
+    let profile_url = null;
+    if (row.profile_path && row.profile_name) {
+      const norm = row.profile_path.startsWith('/') ? row.profile_path : `/${row.profile_path}`;
+      profile_url = `${req.protocol}://${req.get('host')}${norm}/${encodeURIComponent(row.profile_name)}`;
+    }
+
+    return successResponse(res, 'Profile berhasil diambil', { ...row, profile_url });
   } catch (error) {
     next(error);
   }

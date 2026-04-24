@@ -23,7 +23,7 @@ const UPLOAD_FOLDERS = Object.freeze({
   linenAttachment: {
     subDir: 'linenreport',
     publicPath: '/storage/linenreport'
-  }
+  },
 });
 
 function resolveUploadTarget(key) {
@@ -47,6 +47,19 @@ const linenUploadTarget = resolveUploadTarget('linenAttachment');
 const LINEN_UPLOAD_DIR = linenUploadTarget.absoluteDir;
 const LINEN_UPLOAD_PUBLIC_PATH = linenUploadTarget.publicPath;
 
+/* ── Employee-specific dirs — overridable via individual env vars ── */
+function resolveEmployeeDir(envVar, localSubDir) {
+  const raw = process.env[envVar];
+  if (!raw) return path.join(STORAGE_BASE_DIR, localSubDir);
+  return path.isAbsolute(raw) ? raw : path.join(__dirname, '..', raw);
+}
+
+const EMPLOYEE_AVATAR_UPLOAD_DIR         = resolveEmployeeDir('EMPLOYEE_AVATAR_UPLOAD_DIR', 'avatars');
+const EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH = process.env.EMPLOYEE_AVATAR_PUBLIC_PATH || '/storage/assets/avatars';
+
+const EMPLOYEE_DOC_UPLOAD_DIR            = resolveEmployeeDir('EMPLOYEE_DOC_UPLOAD_DIR', 'documents');
+const EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH    = process.env.EMPLOYEE_DOC_PUBLIC_PATH    || '/storage/assets/documents';
+
 function ensureDir(dir) {
   try {
     fs.mkdirSync(dir, { recursive: true });
@@ -58,6 +71,8 @@ function ensureDir(dir) {
 ensureDir(ATTENDANCE_UPLOAD_DIR);
 ensureDir(LEAVE_UPLOAD_DIR);
 ensureDir(LINEN_UPLOAD_DIR);
+ensureDir(EMPLOYEE_AVATAR_UPLOAD_DIR);
+ensureDir(EMPLOYEE_DOC_UPLOAD_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -129,6 +144,48 @@ const uploadLinenAttachment = multer({
   limits: { fileSize: 8 * 1024 * 1024 } // 8MB
 });
 
+/* ── Employee avatar + document upload ──────────────────────────────
+   profile  → EMPLOYEE_AVATAR_UPLOAD_DIR  (images only)
+   ktp/kk/… → EMPLOYEE_DOC_UPLOAD_DIR    (images + PDF)
+────────────────────────────────────────────────────────────────────── */
+const employeeUploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = req.params?.docType === 'profile'
+      ? EMPLOYEE_AVATAR_UPLOAD_DIR
+      : EMPLOYEE_DOC_UPLOAD_DIR;
+    ensureDir(dir);
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const safe = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    const employeeId = safe(req.user?.employee_id || 'unknown');
+    const docType = safe(req.params?.docType || req.body?.doc_type || 'doc');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    cb(null, `${docType}_${employeeId}_${ts}${ext}`);
+  }
+});
+
+const employeeDocFileFilter = (req, file, cb) => {
+  const isProfile = req.params?.docType === 'profile';
+  const ok = isProfile
+    ? /^image\/(jpeg|png|webp)$/.test(file.mimetype || '')
+    : /^image\/(jpeg|png|webp)$|^application\/pdf$/.test(file.mimetype || '');
+  if (!ok) {
+    const msg = isProfile
+      ? 'Foto profil harus berupa gambar (jpeg/png/webp).'
+      : 'File harus berupa gambar (jpeg/png/webp) atau PDF.';
+    return cb(new Error(msg));
+  }
+  cb(null, true);
+};
+
+const uploadEmployeeDoc = multer({
+  storage: employeeUploadStorage,
+  fileFilter: employeeDocFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
+
 module.exports = {
   STORAGE_BASE_DIR,
   UPLOAD_FOLDERS,
@@ -138,8 +195,12 @@ module.exports = {
   LEAVE_UPLOAD_PUBLIC_PATH,
   LINEN_UPLOAD_DIR,
   LINEN_UPLOAD_PUBLIC_PATH,
+  EMPLOYEE_AVATAR_UPLOAD_DIR,
+  EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH,
+  EMPLOYEE_DOC_UPLOAD_DIR,
+  EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH,
   uploadSelfie,
   uploadDoctorNote,
-  uploadLinenAttachment
+  uploadLinenAttachment,
+  uploadEmployeeDoc
 };
-
