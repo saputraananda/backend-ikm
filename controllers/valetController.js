@@ -3,31 +3,24 @@ const { successResponse, errorResponse } = require('../utils/response');
 const { ATTENDANCE_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
 
 /* ── Shared helpers ─────────────────────────────────────────────── */
-const getTodayDate = () => {
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = String(today.getMonth() + 1).padStart(2, '0');
-  const d = String(today.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
+/* Always compute WIB (UTC+7) via explicit offset – avoids relying on process.env.TZ */
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+const getWibNow = () => new Date(Date.now() + WIB_OFFSET_MS);
+
+const getTodayDate = () => getWibNow().toISOString().slice(0, 10);
 
 /* Work-date: if 00:00–03:59 the shift still belongs to the previous calendar day */
 const getWorkDate = () => {
-  const now      = new Date();
-  const totalMin = now.getHours() * 60 + now.getMinutes();
+  const wib      = getWibNow();
+  const totalMin = wib.getUTCHours() * 60 + wib.getUTCMinutes();
   if (totalMin < 240) {
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const y = yesterday.getFullYear();
-    const m = String(yesterday.getMonth() + 1).padStart(2, '0');
-    const d = String(yesterday.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return new Date(wib.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   }
-  return getTodayDate();
+  return wib.toISOString().slice(0, 10);
 };
 
 /* ── Location constants ─────────────────────────────────────────── */
-const MAX_DIST_M = 200;
+const MAX_DIST_M = 100;
 
 /* ── Office locations from DB (cached 5 min) ───────────────────── */
 let _officeLocations = null;
@@ -185,8 +178,9 @@ const shiftPunch = async (req, res, next) => {
       return errorResponse(res,
         `Anda berada ${Math.round(dist)} meter dari lokasi absensi. Maksimal ${MAX_DIST_M} meter.`, 400);
 
-    /* Time-window validation */
-    const totalMin = new Date().getHours() * 60 + new Date().getMinutes();
+    /* Time-window validation (WIB = UTC+7, explicit offset) */
+    const _wib = getWibNow();
+    const totalMin = _wib.getUTCHours() * 60 + _wib.getUTCMinutes();
     let inWindow;
     if (punch_type === 'in') {
       inWindow = totalMin >= timeToMin(shiftRow.check_in_start) && totalMin <= timeToMin(shiftRow.check_in_end);
@@ -323,4 +317,58 @@ const history = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-module.exports = { getTodayShifts, shiftPunch, shiftPunchSelfie, history };
+/* ══════════════════════════════════════════════════════════════════
+   POST /valet/delete-punch
+   Body: { shift_type, punch_type: 'in'|'out' }
+   Clears the check_in or check_out fields so the user can re-punch.
+══════════════════════════════════════════════════════════════════ */
+const deletePunch = async (req, res, next) => {
+  try {
+    const employeeId = req.user.employee_id;
+    const { shift_type, punch_type } = req.body;
+
+    if (!shift_type || !['in', 'out'].includes(punch_type))
+      return errorResponse(res, 'Parameter tidak valid', 400);
+
+    const workDate = getWorkDate();
+
+    if (punch_type === 'in') {
+      /* Prevent deleting check-in when check-out already exists */
+      const [existing] = await pool.query(
+        `SELECT check_out_time FROM tr_attendance_shift_ikm
+         WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 1 LIMIT 1`,
+        [employeeId, workDate, shift_type]
+      );
+      if (existing.length > 0 && existing[0].check_out_time) {
+        return errorResponse(res, 'Tidak dapat menghapus absen masuk karena absen keluar sudah tercatat.', 400);
+      }
+
+      await pool.query(
+        `UPDATE tr_attendance_shift_ikm
+         SET check_in_time = NULL, check_in_lat = NULL, check_in_lng = NULL,
+             check_in_photo_path = NULL, check_in_photo_name = NULL
+         WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 1`,
+        [employeeId, workDate, shift_type]
+      );
+      /* Remove empty record */
+      await pool.query(
+        `DELETE FROM tr_attendance_shift_ikm
+         WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 1
+           AND check_in_time IS NULL AND check_out_time IS NULL`,
+        [employeeId, workDate, shift_type]
+      );
+    } else {
+      await pool.query(
+        `UPDATE tr_attendance_shift_ikm
+         SET check_out_time = NULL, check_out_lat = NULL, check_out_lng = NULL,
+             check_out_photo_path = NULL, check_out_photo_name = NULL
+         WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 1`,
+        [employeeId, workDate, shift_type]
+      );
+    }
+
+    return successResponse(res, 'Absensi berhasil dihapus, silakan absen ulang.');
+  } catch (error) { next(error); }
+};
+
+module.exports = { getTodayShifts, shiftPunch, shiftPunchSelfie, history, deletePunch };

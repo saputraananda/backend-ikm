@@ -10,5 +10,6 @@ router.get('/today-shifts',  ctrl.getTodayShifts);
 router.post('/shift-punch',  ctrl.shiftPunch);
 router.post('/shift-punch-selfie', uploadSelfie.single('selfie'), ctrl.shiftPunchSelfie);
 router.get('/check-cross',  ctrl.checkCross);
+router.post('/delete-punch', ctrl.deletePunch);
 
 module.exports = router;
