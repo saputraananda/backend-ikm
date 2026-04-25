@@ -1,6 +1,6 @@
 const { pool } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
-const { EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH, EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
+const { EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH, EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH, forwardFileToWaschen } = require('../middleware/upload');
 
 /* ── Allowed text fields (whitelist, protects against mass-assignment) ── */
 const ALLOWED_TEXT_FIELDS = [
@@ -60,6 +60,8 @@ const getProfileDetail = async (req, res, next) => {
     /* Build public URLs for each document */
     const buildUrl = (reqObj, docPath, docName) => {
       if (!docPath || !docName) return null;
+      if (docPath.startsWith('http://') || docPath.startsWith('https://'))
+        return `${docPath}/${encodeURIComponent(docName)}`;
       const norm = docPath.startsWith('/') ? docPath : `/${docPath}`;
       return `${reqObj.protocol}://${reqObj.get('host')}${norm}/${encodeURIComponent(docName)}`;
     };
@@ -128,7 +130,8 @@ const uploadDoc = async (req, res, next) => {
     const publicPath = docType === 'profile'
       ? EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH
       : EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH;
-    const fileName   = req.file.filename;
+
+    const { file_name: fileName } = await forwardFileToWaschen(req.file, docType);
 
     await pool.query(
       `UPDATE mst_employee SET ${pathCol} = ?, ${nameCol} = ?, updated_at = NOW()
@@ -136,7 +139,7 @@ const uploadDoc = async (req, res, next) => {
       [publicPath, fileName, employeeId]
     );
 
-    const fileUrl = `${req.protocol}://${req.get('host')}${publicPath}/${encodeURIComponent(fileName)}`;
+    const fileUrl = `${publicPath}/${encodeURIComponent(fileName)}`;
 
     return successResponse(res, 'Dokumen berhasil diunggah.', {
       doc_type: docType,
