@@ -28,7 +28,7 @@ const login = async (req, res, next) => {
         me.phone_number,
         me.is_deleted
       FROM users u
-      LEFT JOIN mst_employee me ON me.employee_id = u.id
+      LEFT JOIN mst_employee me ON me.email = u.email
       WHERE u.username = ?
       LIMIT 1`,
       [username]
@@ -111,7 +111,7 @@ const profile = async (req, res, next) => {
         me.profile_path,
         me.profile_name
       FROM users u
-      LEFT JOIN mst_employee me ON me.employee_id = u.id
+      LEFT JOIN mst_employee me ON me.email = u.email
       WHERE u.id = ?
       LIMIT 1`,
       [req.user.user_id]
@@ -154,8 +154,117 @@ const leaderRole = async (req, res, next) => {
   }
 };
 
+/* ══════════════════════════════════════════════════════════════════
+   POST /auth/register
+   Admin-only. Buat akun user baru dengan password bcrypt-hashed.
+   Body: { name, email, username, password, role?, employee_id? }
+   Jika employee_id disertakan, update mst_employee agar match.
+══════════════════════════════════════════════════════════════════ */
+const register = async (req, res, next) => {
+  try {
+    const caller = req.user;
+    if (caller.role !== 'admin' && caller.role !== 'superadmin') {
+      return errorResponse(res, 'Hanya admin yang dapat mendaftarkan akun.', 403);
+    }
+
+    const { name, email, username, password, role = 'employee', employee_id } = req.body;
+
+    if (!name || !email || !username || !password) {
+      return errorResponse(res, 'name, email, username, dan password wajib diisi.', 400);
+    }
+
+    if (password.length < 6) {
+      return errorResponse(res, 'Password minimal 6 karakter.', 400);
+    }
+
+    /* Cek duplikat username / email */
+    const [dup] = await pool.query(
+      `SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1`,
+      [username, email]
+    );
+    if (dup.length > 0) {
+      return errorResponse(res, 'Username atau email sudah digunakan.', 409);
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const [result] = await pool.query(
+      `INSERT INTO users (name, email, username, password_hash, role) VALUES (?, ?, ?, ?, ?)`,
+      [name, email, username, passwordHash, role]
+    );
+
+    const newUserId = result.insertId;
+
+    /* Jika employee_id diberikan, pastikan mst_employee.employee_id sinkron */
+    if (employee_id) {
+      await pool.query(
+        `UPDATE mst_employee SET employee_id = ? WHERE employee_id = ?`,
+        [newUserId, employee_id]
+      );
+    } else {
+      /* Jika belum ada row mst_employee, buat minimal row agar login tidak error */
+      const [emp] = await pool.query(
+        `SELECT employee_id FROM mst_employee WHERE employee_id = ? LIMIT 1`,
+        [newUserId]
+      );
+      if (emp.length === 0) {
+        await pool.query(
+          `INSERT INTO mst_employee (employee_id, full_name, is_deleted) VALUES (?, ?, 0)`,
+          [newUserId, name]
+        );
+      }
+    }
+
+    return successResponse(res, 'Akun berhasil dibuat.', { user_id: newUserId, username });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   PUT /auth/reset-password
+   Admin-only. Hash ulang password (fix akun yang tersimpan plain text).
+   Body: { username, new_password }
+══════════════════════════════════════════════════════════════════ */
+const resetPassword = async (req, res, next) => {
+  try {
+    const caller = req.user;
+    if (caller.role !== 'admin' && caller.role !== 'superadmin') {
+      return errorResponse(res, 'Hanya admin yang dapat mereset password.', 403);
+    }
+
+    const { username, new_password } = req.body;
+    if (!username || !new_password) {
+      return errorResponse(res, 'username dan new_password wajib diisi.', 400);
+    }
+    if (new_password.length < 6) {
+      return errorResponse(res, 'Password minimal 6 karakter.', 400);
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id FROM users WHERE username = ? LIMIT 1`,
+      [username]
+    );
+    if (rows.length === 0) {
+      return errorResponse(res, 'Username tidak ditemukan.', 404);
+    }
+
+    const passwordHash = await bcrypt.hash(new_password, 12);
+    await pool.query(
+      `UPDATE users SET password_hash = ?, updated_at = NOW() WHERE username = ?`,
+      [passwordHash, username]
+    );
+
+    return successResponse(res, `Password untuk "${username}" berhasil direset.`);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   login,
   profile,
   leaderRole,
+  register,
+  resetPassword,
 };

@@ -24,6 +24,14 @@ const UPLOAD_FOLDERS = Object.freeze({
     subDir: 'linenreport',
     publicPath: '/storage/linenreport'
   },
+  employeeAvatar: {
+    subDir: 'avatars',
+    publicPath: '/storage/avatars'
+  },
+  employeeDoc: {
+    subDir: 'documents',
+    publicPath: '/storage/documents'
+  },
 });
 
 function resolveUploadTarget(key) {
@@ -47,53 +55,13 @@ const linenUploadTarget = resolveUploadTarget('linenAttachment');
 const LINEN_UPLOAD_DIR = linenUploadTarget.absoluteDir;
 const LINEN_UPLOAD_PUBLIC_PATH = linenUploadTarget.publicPath;
 
-/* ── Employee files ──────────────────────────────────────────────────────────
-   Dev  → simpan ke disk lokal (STORAGE_BASE_DIR/avatars & /documents)
-   Prod → di-proxy ke Waschen API
-────────────────────────────────────────────────────────────────────────────── */
-const isProd = process.env.NODE_ENV === 'production';
+const employeeAvatarTarget = resolveUploadTarget('employeeAvatar');
+const EMPLOYEE_AVATAR_DIR = employeeAvatarTarget.absoluteDir;
+const EMPLOYEE_AVATAR_PUBLIC_PATH = employeeAvatarTarget.publicPath;
 
-const EMPLOYEE_AVATAR_LOCAL_DIR = path.join(STORAGE_BASE_DIR, 'avatars');
-const EMPLOYEE_DOC_LOCAL_DIR = path.join(STORAGE_BASE_DIR, 'documents');
-
-const EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH = isProd
-  ? (process.env.WASCHEN_AVATAR_PUBLIC_PATH || 'https://api.waschenalora.com/storage/assets/avatars')
-  : '/storage/avatars';
-
-const EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH = isProd
-  ? (process.env.WASCHEN_DOC_PUBLIC_PATH || 'https://api.waschenalora.com/storage/assets/documents')
-  : '/storage/documents';
-
-async function forwardFileToWaschen(file, docType) {
-  if (!isProd) {
-    const dir = docType === 'profile' ? EMPLOYEE_AVATAR_LOCAL_DIR : EMPLOYEE_DOC_LOCAL_DIR;
-    ensureDir(dir);
-    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
-    const fileName = `${docType}_${Date.now()}${ext}`;
-    fs.writeFileSync(path.join(dir, fileName), file.buffer);
-    return { file_name: fileName };
-  }
-
-  const baseUrl = process.env.WASCHEN_API_URL || 'https://api.waschenalora.com';
-  const url = `${baseUrl}/internal/upload/${docType}`;
-
-  const formData = new FormData();
-  formData.append('doc', new Blob([file.buffer], { type: file.mimetype }), file.originalname);
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'x-internal-key': process.env.WASCHEN_INTERNAL_KEY || '' },
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.status);
-    throw new Error(`Waschen upload gagal (${res.status}): ${text}`);
-  }
-
-  const json = await res.json();
-  return json.data; // expects { file_name: '...' }
-}
+const employeeDocTarget = resolveUploadTarget('employeeDoc');
+const EMPLOYEE_DOC_DIR = employeeDocTarget.absoluteDir;
+const EMPLOYEE_DOC_PUBLIC_PATH = employeeDocTarget.publicPath;
 
 function ensureDir(dir) {
   try {
@@ -106,6 +74,8 @@ function ensureDir(dir) {
 ensureDir(ATTENDANCE_UPLOAD_DIR);
 ensureDir(LEAVE_UPLOAD_DIR);
 ensureDir(LINEN_UPLOAD_DIR);
+ensureDir(EMPLOYEE_AVATAR_DIR);
+ensureDir(EMPLOYEE_DOC_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -178,9 +148,23 @@ const uploadLinenAttachment = multer({
 });
 
 /* ── Employee avatar + document upload ──────────────────────────────
-   File disimpan di buffer (memory), lalu di-forward ke Waschen API.
+   File disimpan ke disk (avatars/ atau documents/ di STORAGE_BASE_DIR).
 ────────────────────────────────────────────────────────────────────── */
-const employeeUploadStorage = multer.memoryStorage();
+const employeeStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = req.params?.docType === 'profile' ? EMPLOYEE_AVATAR_DIR : EMPLOYEE_DOC_DIR;
+    ensureDir(dir);
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const safe = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    const employeeId = safe(req.user?.employee_id || 'unknown');
+    const docType = safe(req.params?.docType || 'doc');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    cb(null, `${docType}_${employeeId}_${ts}${ext}`);
+  }
+});
 
 const employeeDocFileFilter = (req, file, cb) => {
   const isProfile = req.params?.docType === 'profile';
@@ -197,7 +181,7 @@ const employeeDocFileFilter = (req, file, cb) => {
 };
 
 const uploadEmployeeDoc = multer({
-  storage: employeeUploadStorage,
+  storage: employeeStorage,
   fileFilter: employeeDocFileFilter,
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
@@ -211,11 +195,10 @@ module.exports = {
   LEAVE_UPLOAD_PUBLIC_PATH,
   LINEN_UPLOAD_DIR,
   LINEN_UPLOAD_PUBLIC_PATH,
-  EMPLOYEE_AVATAR_LOCAL_DIR,
-  EMPLOYEE_DOC_LOCAL_DIR,
-  EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH,
-  EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH,
-  forwardFileToWaschen,
+  EMPLOYEE_AVATAR_DIR,
+  EMPLOYEE_AVATAR_PUBLIC_PATH,
+  EMPLOYEE_DOC_DIR,
+  EMPLOYEE_DOC_PUBLIC_PATH,
   uploadSelfie,
   uploadDoctorNote,
   uploadLinenAttachment,

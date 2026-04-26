@@ -23,8 +23,8 @@ const {
   ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH,
   LEAVE_UPLOAD_DIR, LEAVE_UPLOAD_PUBLIC_PATH,
   LINEN_UPLOAD_DIR, LINEN_UPLOAD_PUBLIC_PATH,
-  EMPLOYEE_AVATAR_LOCAL_DIR, EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH,
-  EMPLOYEE_DOC_LOCAL_DIR, EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH,
+  EMPLOYEE_AVATAR_DIR, EMPLOYEE_AVATAR_PUBLIC_PATH,
+  EMPLOYEE_DOC_DIR, EMPLOYEE_DOC_PUBLIC_PATH,
 } = require('./middleware/upload');
 
 const app = express();
@@ -47,10 +47,8 @@ app.use(LEAVE_UPLOAD_PUBLIC_PATH, express.static(LEAVE_UPLOAD_DIR));
 app.use(LINEN_UPLOAD_PUBLIC_PATH, express.static(LINEN_UPLOAD_DIR));
 
 // Dev only — di prod file karyawan ada di waschen, tidak perlu di-serve di sini
-if (process.env.NODE_ENV !== 'production') {
-  app.use(EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH, express.static(EMPLOYEE_AVATAR_LOCAL_DIR));
-  app.use(EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH,    express.static(EMPLOYEE_DOC_LOCAL_DIR));
-}
+app.use(EMPLOYEE_AVATAR_PUBLIC_PATH, express.static(EMPLOYEE_AVATAR_DIR));
+app.use(EMPLOYEE_DOC_PUBLIC_PATH,    express.static(EMPLOYEE_DOC_DIR));
 
 app.get('/api/health', (req, res) => {
   res.json({ success: true, message: 'OK LANJOTT' });
@@ -66,6 +64,13 @@ app.use('/api/leave', leaveRoutes);
 app.use('/api/linen-report', linenReportRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/management-attendance', managementAttendanceRoutes);
+
+// SPA fallback — serve index.html for non-API, non-storage routes
+const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
+app.use(express.static(FRONTEND_DIST));
+app.get(/^(?!\/api\/|\/storage\/).*/, (req, res) => {
+  res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
+});
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Not Found' });

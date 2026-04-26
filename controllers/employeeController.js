@@ -1,6 +1,6 @@
 const { pool } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
-const { EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH, EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH, forwardFileToWaschen } = require('../middleware/upload');
+const { EMPLOYEE_AVATAR_PUBLIC_PATH, EMPLOYEE_DOC_PUBLIC_PATH } = require('../middleware/upload');
 
 /* ── Allowed text fields (whitelist, protects against mass-assignment) ── */
 const ALLOWED_TEXT_FIELDS = [
@@ -128,10 +128,10 @@ const uploadDoc = async (req, res, next) => {
 
     const { path: pathCol, name: nameCol } = DOC_COLUMNS[docType];
     const publicPath = docType === 'profile'
-      ? EMPLOYEE_AVATAR_UPLOAD_PUBLIC_PATH
-      : EMPLOYEE_DOC_UPLOAD_PUBLIC_PATH;
+      ? EMPLOYEE_AVATAR_PUBLIC_PATH
+      : EMPLOYEE_DOC_PUBLIC_PATH;
 
-    const { file_name: fileName } = await forwardFileToWaschen(req.file, docType);
+    const fileName = req.file.filename;
 
     await pool.query(
       `UPDATE mst_employee SET ${pathCol} = ?, ${nameCol} = ?, updated_at = NOW()
