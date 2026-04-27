@@ -37,6 +37,26 @@ exports.getHospitals = async (req, res) => {
 };
 
 /**
+ * GET /api/linen-report/check-today
+ * Returns { submitted: true/false } for the logged-in user on today's date
+ */
+exports.checkTodayReport = async (req, res) => {
+  try {
+    const employeeId = req.user?.employee_id;
+    if (!employeeId) return errorResponse(res, 'Unauthorized', 401);
+
+    const [rows] = await poolIkm.query(
+      `SELECT id FROM tr_linen_report WHERE reported_by = ? AND report_date = CURDATE() LIMIT 1`,
+      [employeeId]
+    );
+    return successResponse(res, 'OK', { submitted: rows.length > 0 });
+  } catch (err) {
+    console.error('[linenReport] checkTodayReport', err);
+    return errorResponse(res, 'Terjadi kesalahan server', 500);
+  }
+};
+
+/**
  * POST /api/linen-report
  * Submit a new linen finding report
  * Body (multipart/form-data):
@@ -49,12 +69,14 @@ exports.submitLinenReport = async (req, res) => {
     const employeeId = req.user?.employee_id;
     if (!employeeId) return errorResponse(res, 'Unauthorized', 401);
 
-    const { reporter_name, report_date, area_id, hospital_id, linen_type, finding_type, finding_qty } = req.body;
+    const { reporter_name, report_date, area_id, hospital_id, finding_location, linen_type, finding_type, finding_qty } = req.body;
 
     if (!reporter_name?.trim()) return errorResponse(res, 'Nama penemu wajib diisi', 400);
     if (!report_date) return errorResponse(res, 'Tanggal temuan wajib diisi', 400);
     if (!area_id) return errorResponse(res, 'Divisi wajib dipilih', 400);
     if (!hospital_id) return errorResponse(res, 'Rumah sakit wajib dipilih', 400);
+    if (!finding_location || !['Rumah Sakit', 'IKM'].includes(finding_location))
+      return errorResponse(res, 'Lokasi penemuan wajib dipilih', 400);
     if (!linen_type?.trim()) return errorResponse(res, 'Jenis linen wajib diisi', 400);
     if (!finding_type?.trim()) return errorResponse(res, 'Jenis temuan wajib dipilih', 400);
     if (!finding_qty || isNaN(Number(finding_qty)) || Number(finding_qty) < 1)
@@ -66,13 +88,14 @@ exports.submitLinenReport = async (req, res) => {
 
     await poolIkm.query(
       `INSERT INTO tr_linen_report
-        (reporter_name, report_date, area_id, hospital_id, linen_type, finding_type, finding_qty, attachment_path, reported_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (reporter_name, report_date, area_id, hospital_id, finding_location, linen_type, finding_type, finding_qty, attachment_path, reported_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         reporter_name.trim(),
         report_date,
         Number(area_id),
         Number(hospital_id),
+        finding_location,
         linen_type.trim(),
         finding_type.trim(),
         Number(finding_qty),

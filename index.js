@@ -16,6 +16,7 @@ const valetRoutes = require('./routes/valetRoutes');
 const historyRoutes = require('./routes/historyRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
 const linenReportRoutes = require('./routes/linenReportRoutes');
+const dailyReportRoutes = require('./routes/dailyReportLeaderRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const managementAttendanceRoutes = require('./routes/managementAttendanceRoutes');
 const errorMiddleware = require('./middleware/errorMiddleware');
@@ -23,6 +24,7 @@ const {
   ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH,
   LEAVE_UPLOAD_DIR, LEAVE_UPLOAD_PUBLIC_PATH,
   LINEN_UPLOAD_DIR, LINEN_UPLOAD_PUBLIC_PATH,
+  DAILY_REPORT_UPLOAD_DIR, DAILY_REPORT_UPLOAD_PUBLIC_PATH,
   EMPLOYEE_AVATAR_DIR, EMPLOYEE_AVATAR_PUBLIC_PATH,
   EMPLOYEE_DOC_DIR, EMPLOYEE_DOC_PUBLIC_PATH,
 } = require('./middleware/upload');
@@ -45,6 +47,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(ATTENDANCE_UPLOAD_PUBLIC_PATH, express.static(ATTENDANCE_UPLOAD_DIR));
 app.use(LEAVE_UPLOAD_PUBLIC_PATH, express.static(LEAVE_UPLOAD_DIR));
 app.use(LINEN_UPLOAD_PUBLIC_PATH, express.static(LINEN_UPLOAD_DIR));
+app.use(DAILY_REPORT_UPLOAD_PUBLIC_PATH, express.static(DAILY_REPORT_UPLOAD_DIR));
 
 // Dev only — di prod file karyawan ada di waschen, tidak perlu di-serve di sini
 app.use(EMPLOYEE_AVATAR_PUBLIC_PATH, express.static(EMPLOYEE_AVATAR_DIR));
@@ -62,6 +65,7 @@ app.use('/api/valet', valetRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/linen-report', linenReportRoutes);
+app.use('/api/daily-report', dailyReportRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/management-attendance', managementAttendanceRoutes);
 

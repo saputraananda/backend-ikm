@@ -24,6 +24,10 @@ const UPLOAD_FOLDERS = Object.freeze({
     subDir: 'linenreport',
     publicPath: '/storage/linenreport'
   },
+  dailyReportBriefing: {
+    subDir: 'dailyreport',
+    publicPath: '/storage/dailyreport'
+  },
   employeeAvatar: {
     subDir: 'avatars',
     publicPath: '/storage/avatars'
@@ -55,6 +59,10 @@ const linenUploadTarget = resolveUploadTarget('linenAttachment');
 const LINEN_UPLOAD_DIR = linenUploadTarget.absoluteDir;
 const LINEN_UPLOAD_PUBLIC_PATH = linenUploadTarget.publicPath;
 
+const dailyReportTarget = resolveUploadTarget('dailyReportBriefing');
+const DAILY_REPORT_UPLOAD_DIR = dailyReportTarget.absoluteDir;
+const DAILY_REPORT_UPLOAD_PUBLIC_PATH = dailyReportTarget.publicPath;
+
 const employeeAvatarTarget = resolveUploadTarget('employeeAvatar');
 const EMPLOYEE_AVATAR_DIR = employeeAvatarTarget.absoluteDir;
 const EMPLOYEE_AVATAR_PUBLIC_PATH = employeeAvatarTarget.publicPath;
@@ -74,6 +82,7 @@ function ensureDir(dir) {
 ensureDir(ATTENDANCE_UPLOAD_DIR);
 ensureDir(LEAVE_UPLOAD_DIR);
 ensureDir(LINEN_UPLOAD_DIR);
+ensureDir(DAILY_REPORT_UPLOAD_DIR);
 ensureDir(EMPLOYEE_AVATAR_DIR);
 ensureDir(EMPLOYEE_DOC_DIR);
 
@@ -147,6 +156,27 @@ const uploadLinenAttachment = multer({
   limits: { fileSize: 8 * 1024 * 1024 } // 8MB
 });
 
+/* ── Daily report briefing photo upload ──────────────────────────── */
+const dailyReportStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    ensureDir(DAILY_REPORT_UPLOAD_DIR);
+    cb(null, DAILY_REPORT_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const safe = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    const employeeId = safe(req.user?.employee_id || 'unknown');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    cb(null, `briefing_${employeeId}_${ts}${ext}`);
+  }
+});
+
+const uploadDailyReportBriefing = multer({
+  storage: dailyReportStorage,
+  fileFilter,
+  limits: { fileSize: 8 * 1024 * 1024 } // 8MB
+});
+
 /* ── Employee avatar + document upload ──────────────────────────────
    File disimpan ke disk (avatars/ atau documents/ di STORAGE_BASE_DIR).
 ────────────────────────────────────────────────────────────────────── */
@@ -202,5 +232,8 @@ module.exports = {
   uploadSelfie,
   uploadDoctorNote,
   uploadLinenAttachment,
+  DAILY_REPORT_UPLOAD_DIR,
+  DAILY_REPORT_UPLOAD_PUBLIC_PATH,
+  uploadDailyReportBriefing,
   uploadEmployeeDoc
 };
