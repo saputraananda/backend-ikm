@@ -31,7 +31,7 @@ async function getOfficeLocations() {
   const now = Date.now();
   if (_officeLocations && (now - _officeLocationsAt) < LOCATION_CACHE_MS) return _officeLocations;
   const [rows] = await pool.query(
-    'SELECT location_id, location_name, latitude, longitude FROM mst_location_absen ORDER BY id'
+    'SELECT id, location_id, location_name, latitude, longitude FROM mst_location_absen ORDER BY id'
   );
   _officeLocations = rows;
   _officeLocationsAt = now;
@@ -169,14 +169,16 @@ const shiftPunch = async (req, res, next) => {
       return errorResponse(res, 'Lokasi tidak tersedia. Aktifkan GPS dan izinkan akses lokasi.', 400);
 
     const locations = await getOfficeLocations();
+    let nearestLoc = null;
     let dist = Infinity;
     for (const loc of locations) {
       const d = haversineMeters(parseFloat(lat), parseFloat(lng), parseFloat(loc.latitude), parseFloat(loc.longitude));
-      if (d < dist) dist = d;
+      if (d < dist) { dist = d; nearestLoc = loc; }
     }
-    if (dist > MAX_DIST_M)
+    const maxDist = (nearestLoc && nearestLoc.id > 3) ? 2000 : MAX_DIST_M;
+    if (dist > maxDist)
       return errorResponse(res,
-        `Anda berada ${Math.round(dist)} meter dari lokasi absensi. Maksimal ${MAX_DIST_M} meter.`, 400);
+        `Anda berada ${Math.round(dist)} meter dari lokasi absensi. Maksimal ${maxDist >= 1000 ? (maxDist / 1000) + ' kilometer' : maxDist + ' meter'}.`, 400);
 
     /* Time-window validation (WIB = UTC+7, explicit offset) */
     const _wib = getWibNow();
