@@ -48,10 +48,14 @@ const combinedHistory = async (req, res, next) => {
          MAX(CASE WHEN is_valet=0 AND shift_type='lembur' THEN check_out_time END) AS lembur_out,
 
          /* ── Valet shifts ── */
-         MAX(CASE WHEN is_valet=1 AND shift_type='pagi' THEN check_in_time  END) AS valet_pagi_in,
-         MAX(CASE WHEN is_valet=1 AND shift_type='pagi' THEN check_out_time END) AS valet_pagi_out,
-         MAX(CASE WHEN is_valet=1 AND shift_type='sore' THEN check_in_time  END) AS valet_sore_in,
-         MAX(CASE WHEN is_valet=1 AND shift_type='sore' THEN check_out_time END) AS valet_sore_out,
+         MAX(CASE WHEN is_valet=1 AND shift_type='pagi'   THEN check_in_time  END) AS valet_pagi_in,
+         MAX(CASE WHEN is_valet=1 AND shift_type='pagi'   THEN check_out_time END) AS valet_pagi_out,
+         MAX(CASE WHEN is_valet=1 AND shift_type='siang'  THEN check_in_time  END) AS valet_siang_in,
+         MAX(CASE WHEN is_valet=1 AND shift_type='siang'  THEN check_out_time END) AS valet_siang_out,
+         MAX(CASE WHEN is_valet=1 AND shift_type='sore'   THEN check_in_time  END) AS valet_sore_in,
+         MAX(CASE WHEN is_valet=1 AND shift_type='sore'   THEN check_out_time END) AS valet_sore_out,
+         MAX(CASE WHEN is_valet=1 AND shift_type='lembur' THEN check_in_time  END) AS valet_lembur_in,
+         MAX(CASE WHEN is_valet=1 AND shift_type='lembur' THEN check_out_time END) AS valet_lembur_out,
 
          /* ── Flags ── */
          MAX(CASE WHEN is_valet=0 THEN 1 ELSE 0 END) AS has_normal,
