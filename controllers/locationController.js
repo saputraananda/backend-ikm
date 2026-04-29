@@ -8,7 +8,7 @@ const { successResponse } = require('../utils/response');
 const getLocations = async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      'SELECT location_id, location_name, latitude, longitude FROM mst_location_absen ORDER BY id'
+      'SELECT id, location_id, location_name, latitude, longitude FROM mst_location_absen ORDER BY id'
     );
     return successResponse(res, 'Data lokasi absensi', rows);
   } catch (error) { next(error); }
