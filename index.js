@@ -1,7 +1,17 @@
 process.env.TZ = 'Asia/Jakarta';
 
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Catch-all agar Node tidak mati karena unhandled error
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException — server tetap jalan:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] unhandledRejection — server tetap jalan:', reason);
+});
 
 const express = require('express');
 const cors = require('cors');
@@ -71,10 +81,16 @@ app.use('/api/management-attendance', managementAttendanceRoutes);
 
 // SPA fallback — serve index.html for non-API, non-storage routes
 const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
-app.use(express.static(FRONTEND_DIST));
-app.get(/^(?!\/api\/|\/storage\/).*/, (req, res) => {
-  res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
-});
+const FRONTEND_INDEX = path.join(FRONTEND_DIST, 'index.html');
+const hasFrontend = fs.existsSync(FRONTEND_INDEX);
+if (hasFrontend) {
+  app.use(express.static(FRONTEND_DIST));
+  app.get(/^(?!\/api\/|\/storage\/).*/, (req, res) => {
+    res.sendFile(FRONTEND_INDEX);
+  });
+} else {
+  console.warn('[WARN] Frontend dist tidak ditemukan di:', FRONTEND_DIST);
+}
 
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Not Found' });
