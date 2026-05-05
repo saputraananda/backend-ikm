@@ -35,14 +35,14 @@ const login = async (req, res, next) => {
     );
 
     if (rows.length === 0) {
-      return errorResponse(res, 'Username atau password salah', 401);
+      return errorResponse(res, 'Username tidak ditemukan', 401);
     }
 
     const user = rows[0];
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return errorResponse(res, 'Username atau password salah', 401);
+      return errorResponse(res, 'Password salah', 401);
     }
 
     if (!user.employee_id) {
