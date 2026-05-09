@@ -7,6 +7,10 @@ const ctrl = require('../controllers/dailyReportLeaderController');
 router.get('/areas',       authMiddleware, ctrl.getAreas);
 router.get('/employees',   authMiddleware, ctrl.getEmployees);
 router.get('/check-today', authMiddleware, ctrl.checkTodayReport);
-router.post('/', authMiddleware, uploadDailyReportBriefing.single('briefing_doc'), ctrl.submitDailyReport);
+router.get('/my-reports',  authMiddleware, ctrl.getMyReports);
+router.get('/:id',         authMiddleware, ctrl.getReport);
+router.post('/',           authMiddleware, uploadDailyReportBriefing.single('briefing_doc'), ctrl.submitDailyReport);
+router.put('/:id',         authMiddleware, uploadDailyReportBriefing.single('briefing_doc'), ctrl.updateDailyReport);
+router.delete('/:id',      authMiddleware, ctrl.deleteReport);
 
 module.exports = router;
