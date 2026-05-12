@@ -1,6 +1,6 @@
 const path = require('path');
 const fs = require('fs');
-const { poolIkm } = require('../db/pool');
+const { pool, poolIkm } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
 const { LINEN_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
 
@@ -41,6 +41,87 @@ exports.getHospitals = async (req, res) => {
     return successResponse(res, 'OK', rows);
   } catch (err) {
     console.error('[linenReport] getHospitals', err);
+    return errorResponse(res, 'Terjadi kesalahan server', 500);
+  }
+};
+
+/**
+ * GET /api/linen-report/leaders
+ * Returns leaders, deputies, and management with their names for reporter filter.
+ */
+exports.getLeaders = async (req, res) => {
+  try {
+    const [leaders] = await poolIkm.query(
+      `SELECT employee_id, role FROM mst_leader ORDER BY role, employee_id ASC`
+    );
+    if (!leaders.length) return successResponse(res, 'OK', []);
+
+    const ids = leaders.map(l => l.employee_id);
+    const [employees] = await pool.query(
+      `SELECT employee_id, full_name FROM mst_employee WHERE employee_id IN (?) AND is_deleted = 0`,
+      [ids]
+    );
+
+    const nameMap = {};
+    employees.forEach(e => { nameMap[e.employee_id] = e.full_name; });
+
+    const result = leaders.map(l => ({
+      employee_id: l.employee_id,
+      role: l.role,
+      full_name: nameMap[l.employee_id] || `Employee #${l.employee_id}`,
+    }));
+
+    return successResponse(res, 'OK', result);
+  } catch (err) {
+    console.error('[linenReport] getLeaders', err);
+    return errorResponse(res, 'Terjadi kesalahan server', 500);
+  }
+};
+
+/**
+ * GET /api/linen-report/all-reports
+ * Returns all linen reports visible to the caller (not restricted to reported_by).
+ * Query: ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&reportedBy=<employee_id>
+ */
+exports.getAllReports = async (req, res) => {
+  try {
+    const employeeId = req.user?.employee_id;
+    if (!employeeId) return errorResponse(res, 'Unauthorized', 401);
+
+    const { startDate, endDate, reportedBy } = req.query;
+    let where = 'WHERE 1=1';
+    const params = [];
+
+    if (reportedBy) {
+      where += ' AND reported_by = ?';
+      params.push(Number(reportedBy));
+    }
+    if (startDate) {
+      where += ' AND report_date >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      where += ' AND report_date <= ?';
+      params.push(endDate);
+    }
+
+    const [rows] = await poolIkm.query(
+      `SELECT
+         id, reporter_name, report_date, area_id, hospital_id,
+         finding_location, linen_type, finding_type, finding_qty,
+         attachment_path, status, sending_note,
+         process_by, process_by_name, process_note, process_path, process_at,
+         completed_by, completed_by_name, completed_note, completed_path, completed_at,
+         reported_by, created_at
+       FROM tr_linen_report
+       ${where}
+       ORDER BY created_at DESC`,
+      params
+    );
+
+    return successResponse(res, 'OK', rows);
+  } catch (err) {
+    console.error('[linenReport] getAllReports', err);
     return errorResponse(res, 'Terjadi kesalahan server', 500);
   }
 };
@@ -152,9 +233,9 @@ exports.getMyReports = async (req, res) => {
          id, reporter_name, report_date, area_id, hospital_id,
          finding_location, linen_type, finding_type, finding_qty,
          attachment_path, status, sending_note,
-         process_by, process_by_name, process_note, process_at,
-         completed_by, completed_by_name, completed_note, completed_at,
-         created_at
+         process_by, process_by_name, process_note, process_path, process_at,
+         completed_by, completed_by_name, completed_note, completed_path, completed_at,
+         reported_by, created_at
        FROM tr_linen_report
        ${where}
        ORDER BY created_at DESC`,
@@ -181,9 +262,9 @@ exports.getReportById = async (req, res) => {
          id, reporter_name, report_date, area_id, hospital_id,
          finding_location, linen_type, finding_type, finding_qty,
          attachment_path, status, sending_note,
-         process_by, process_by_name, process_note, process_at,
-         completed_by, completed_by_name, completed_note, completed_at,
-         created_at
+         process_by, process_by_name, process_note, process_path, process_at,
+         completed_by, completed_by_name, completed_note, completed_path, completed_at,
+         reported_by, created_at
        FROM tr_linen_report
        WHERE id = ? AND reported_by = ?
        LIMIT 1`,
@@ -273,12 +354,14 @@ exports.deleteReport = async (req, res) => {
     const reportId = req.params.id;
 
     const [existing] = await poolIkm.query(
-      `SELECT attachment_path FROM tr_linen_report WHERE id = ? AND reported_by = ? LIMIT 1`,
+      `SELECT attachment_path, process_path, completed_path FROM tr_linen_report WHERE id = ? AND reported_by = ? LIMIT 1`,
       [reportId, employeeId]
     );
     if (!existing.length) return errorResponse(res, 'Laporan tidak ditemukan', 404);
 
     deleteAttachment(existing[0].attachment_path);
+    deleteAttachment(existing[0].process_path);
+    deleteAttachment(existing[0].completed_path);
 
     await poolIkm.query(
       `DELETE FROM tr_linen_report WHERE id = ? AND reported_by = ?`,
@@ -325,26 +408,33 @@ exports.updateStatus = async (req, res) => {
       return errorResponse(res, 'Laporan harus diproses terlebih dahulu', 400);
     }
 
+    const photoPath = req.file
+      ? `${LINEN_UPLOAD_PUBLIC_PATH}/${req.file.filename}`
+      : null;
+
     if (status === 'proses') {
       await poolIkm.query(
         `UPDATE tr_linen_report SET
           status = 'proses',
-          process_by = ?, process_by_name = ?, process_note = ?, process_at = NOW()
+          process_by = ?, process_by_name = ?, process_note = ?, process_path = ?, process_at = NOW()
          WHERE id = ?`,
-        [employeeId, fullName, note?.trim() || null, reportId]
+        [employeeId, fullName, note?.trim() || null, photoPath, reportId]
       );
     } else {
       await poolIkm.query(
         `UPDATE tr_linen_report SET
           status = 'selesai',
-          completed_by = ?, completed_by_name = ?, completed_note = ?, completed_at = NOW()
+          completed_by = ?, completed_by_name = ?, completed_note = ?, completed_path = ?, completed_at = NOW()
          WHERE id = ?`,
-        [employeeId, fullName, note?.trim() || null, reportId]
+        [employeeId, fullName, note?.trim() || null, photoPath, reportId]
       );
     }
 
     return successResponse(res, `Status laporan diperbarui ke ${status}`);
   } catch (err) {
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+    }
     console.error('[linenReport] updateStatus', err);
     return errorResponse(res, 'Terjadi kesalahan server', 500);
   }

@@ -36,6 +36,10 @@ const UPLOAD_FOLDERS = Object.freeze({
     subDir: 'documents',
     publicPath: '/storage/documents'
   },
+  kasbonProof: {
+    subDir: 'kasbon',
+    publicPath: '/storage/kasbon'
+  },
 });
 
 function resolveUploadTarget(key) {
@@ -71,6 +75,10 @@ const employeeDocTarget = resolveUploadTarget('employeeDoc');
 const EMPLOYEE_DOC_DIR = employeeDocTarget.absoluteDir;
 const EMPLOYEE_DOC_PUBLIC_PATH = employeeDocTarget.publicPath;
 
+const kasbonTarget = resolveUploadTarget('kasbonProof');
+const KASBON_UPLOAD_DIR = kasbonTarget.absoluteDir;
+const KASBON_UPLOAD_PUBLIC_PATH = kasbonTarget.publicPath;
+
 function ensureDir(dir) {
   try {
     fs.mkdirSync(dir, { recursive: true });
@@ -85,6 +93,7 @@ ensureDir(LINEN_UPLOAD_DIR);
 ensureDir(DAILY_REPORT_UPLOAD_DIR);
 ensureDir(EMPLOYEE_AVATAR_DIR);
 ensureDir(EMPLOYEE_DOC_DIR);
+ensureDir(KASBON_UPLOAD_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -177,6 +186,27 @@ const uploadDailyReportBriefing = multer({
   limits: { fileSize: 8 * 1024 * 1024 } // 8MB
 });
 
+/* ── Kasbon / Pinjaman proof photo upload ───────────────────────── */
+const kasbonStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    ensureDir(KASBON_UPLOAD_DIR);
+    cb(null, KASBON_UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    const safe = (s) => String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80);
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    const employeeId = safe(req.user?.employee_id || 'unknown');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    cb(null, `kasbon_${employeeId}_${ts}${ext}`);
+  }
+});
+
+const uploadKasbonProof = multer({
+  storage: kasbonStorage,
+  fileFilter,
+  limits: { fileSize: 8 * 1024 * 1024 } // 8MB
+});
+
 /* ── Employee avatar + document upload ──────────────────────────────
    File disimpan ke disk (avatars/ atau documents/ di STORAGE_BASE_DIR).
 ────────────────────────────────────────────────────────────────────── */
@@ -235,5 +265,8 @@ module.exports = {
   DAILY_REPORT_UPLOAD_DIR,
   DAILY_REPORT_UPLOAD_PUBLIC_PATH,
   uploadDailyReportBriefing,
-  uploadEmployeeDoc
+  uploadEmployeeDoc,
+  KASBON_UPLOAD_DIR,
+  KASBON_UPLOAD_PUBLIC_PATH,
+  uploadKasbonProof,
 };

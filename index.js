@@ -29,6 +29,7 @@ const linenReportRoutes = require('./routes/linenReportRoutes');
 const dailyReportRoutes = require('./routes/dailyReportLeaderRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const managementAttendanceRoutes = require('./routes/managementAttendanceRoutes');
+const kasbonRoutes = require('./routes/kasbonRoutes');
 const errorMiddleware = require('./middleware/errorMiddleware');
 const {
   ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH,
@@ -37,6 +38,7 @@ const {
   DAILY_REPORT_UPLOAD_DIR, DAILY_REPORT_UPLOAD_PUBLIC_PATH,
   EMPLOYEE_AVATAR_DIR, EMPLOYEE_AVATAR_PUBLIC_PATH,
   EMPLOYEE_DOC_DIR, EMPLOYEE_DOC_PUBLIC_PATH,
+  KASBON_UPLOAD_DIR, KASBON_UPLOAD_PUBLIC_PATH,
 } = require('./middleware/upload');
 
 const app = express();
@@ -58,6 +60,7 @@ app.use(ATTENDANCE_UPLOAD_PUBLIC_PATH, express.static(ATTENDANCE_UPLOAD_DIR));
 app.use(LEAVE_UPLOAD_PUBLIC_PATH, express.static(LEAVE_UPLOAD_DIR));
 app.use(LINEN_UPLOAD_PUBLIC_PATH, express.static(LINEN_UPLOAD_DIR));
 app.use(DAILY_REPORT_UPLOAD_PUBLIC_PATH, express.static(DAILY_REPORT_UPLOAD_DIR));
+app.use(KASBON_UPLOAD_PUBLIC_PATH,       express.static(KASBON_UPLOAD_DIR));
 
 // Dev only — di prod file karyawan ada di waschen, tidak perlu di-serve di sini
 app.use(EMPLOYEE_AVATAR_PUBLIC_PATH, express.static(EMPLOYEE_AVATAR_DIR));
@@ -78,6 +81,7 @@ app.use('/api/linen-report', linenReportRoutes);
 app.use('/api/daily-report', dailyReportRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/management-attendance', managementAttendanceRoutes);
+app.use('/api/kasbon',               kasbonRoutes);
 
 // SPA fallback — serve index.html for non-API, non-storage routes
 const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
