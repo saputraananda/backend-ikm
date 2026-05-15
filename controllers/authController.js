@@ -26,7 +26,8 @@ const login = async (req, res, next) => {
         me.department_id,
         me.position_id,
         me.phone_number,
-        me.is_deleted
+        me.is_deleted,
+        me.exit_date
       FROM users u
       LEFT JOIN mst_employee me ON me.email = u.email
       WHERE u.username = ?
@@ -45,8 +46,8 @@ const login = async (req, res, next) => {
       return errorResponse(res, 'Password salah', 401);
     }
 
-    if (!user.employee_id) {
-      return errorResponse(res, 'Data employee tidak ditemukan', 403);
+    if (!user.employee_id || user.exit_date !== null) {
+      return errorResponse(res, 'Data employee tidak ditemukan atau sudah keluar', 403);
     }
 
     if (user.is_deleted === 1) {
