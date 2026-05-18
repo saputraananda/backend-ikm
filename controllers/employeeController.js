@@ -7,7 +7,7 @@ const ALLOWED_TEXT_FIELDS = [
   'join_date', 'contract_end_date', 'school_name', 'religion_id',
   'marital_status', 'bank_id', 'bank_account_number',
   'gender', 'birth_place', 'birth_date', 'address', 'ktp_number',
-  'phone_number',
+  'phone_number', 'mother_name', 'emergency_contact', 'education_level_id',
 ];
 
 /* ── Doc types with their DB path/name column pairs ── */
@@ -35,7 +35,8 @@ const getProfileDetail = async (req, res, next) => {
       `SELECT
          me.employee_id, me.employee_code, me.full_name, me.gender,
          me.birth_place, me.birth_date, me.address, me.ktp_number,
-         me.phone_number, me.school_name, me.religion_id,
+         me.phone_number, me.mother_name, me.emergency_contact,
+         me.school_name, me.religion_id, me.education_level_id,
          me.marital_status, me.bank_id, me.bank_account_number,
          me.join_date, me.contract_end_date,
          me.ktp_path, me.ktp_name,
@@ -162,4 +163,17 @@ const getBanks = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-module.exports = { getProfileDetail, updateProfile, uploadDoc, getBanks };
+/* ══════════════════════════════════════════════════════════════════
+   GET /employee/education-levels
+   Returns active education level list for dropdown
+══════════════════════════════════════════════════════════════════ */
+const getEducationLevels = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT education_level_id, education_level_name FROM mst_education_level WHERE is_active = 1 ORDER BY education_level_id`
+    );
+    return successResponse(res, 'Data tingkat pendidikan berhasil diambil', rows);
+  } catch (error) { next(error); }
+};
+
+module.exports = { getProfileDetail, updateProfile, uploadDoc, getBanks, getEducationLevels };

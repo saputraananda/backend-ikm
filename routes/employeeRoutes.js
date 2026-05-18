@@ -6,9 +6,10 @@ const { uploadEmployeeDoc } = require('../middleware/upload');
 
 router.use(authMiddleware);
 
-router.get('/banks',                ctrl.getBanks);
-router.get('/profile-detail',       ctrl.getProfileDetail);
-router.put('/update-profile',       ctrl.updateProfile);
-router.post('/upload-doc/:docType', uploadEmployeeDoc.single('doc'), ctrl.uploadDoc);
+router.get('/banks',                 ctrl.getBanks);
+router.get('/education-levels',      ctrl.getEducationLevels);
+router.get('/profile-detail',        ctrl.getProfileDetail);
+router.put('/update-profile',        ctrl.updateProfile);
+router.post('/upload-doc/:docType',  uploadEmployeeDoc.single('doc'), ctrl.uploadDoc);
 
 module.exports = router;
