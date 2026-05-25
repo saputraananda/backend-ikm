@@ -108,7 +108,7 @@ exports.getAllReports = async (req, res) => {
     const [rows] = await poolIkm.query(
       `SELECT
          id, reporter_name, report_date, area_id, hospital_id,
-         finding_location, linen_type, finding_type, finding_qty,
+         finding_location, ownership_type, linen_type, finding_type, finding_qty,
          attachment_path, status, sending_note,
          process_by, process_by_name, process_note, process_path, process_at,
          completed_by, completed_by_name, completed_note, completed_path, completed_at,
@@ -156,7 +156,7 @@ exports.submitLinenReport = async (req, res) => {
 
     const {
       reporter_name, report_date, area_id, hospital_id,
-      finding_location, linen_type, finding_type, finding_qty, sending_note
+      finding_location, ownership_type, linen_type, finding_type, finding_qty, sending_note
     } = req.body;
 
     if (!reporter_name?.trim()) return errorResponse(res, 'Nama penemu wajib diisi', 400);
@@ -165,6 +165,8 @@ exports.submitLinenReport = async (req, res) => {
     if (!hospital_id) return errorResponse(res, 'Rumah sakit wajib dipilih', 400);
     if (!finding_location || !['Rumah Sakit', 'IKM'].includes(finding_location))
       return errorResponse(res, 'Lokasi penemuan wajib dipilih', 400);
+    if (!ownership_type || !['hospital', 'rental'].includes(ownership_type))
+      return errorResponse(res, 'Kepemilikan linen wajib dipilih', 400);
     if (!linen_type?.trim()) return errorResponse(res, 'Jenis linen wajib diisi', 400);
     if (!finding_type?.trim()) return errorResponse(res, 'Jenis temuan wajib dipilih', 400);
     if (!finding_qty || isNaN(Number(finding_qty)) || Number(finding_qty) < 1)
@@ -177,15 +179,16 @@ exports.submitLinenReport = async (req, res) => {
     const [result] = await poolIkm.query(
       `INSERT INTO tr_linen_report
         (reporter_name, report_date, area_id, hospital_id, finding_location,
-         linen_type, finding_type, finding_qty, attachment_path,
+         ownership_type, linen_type, finding_type, finding_qty, attachment_path,
          reported_by, status, sending_note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         reporter_name.trim(),
         report_date,
         Number(area_id),
         Number(hospital_id),
         finding_location,
+        ownership_type,
         linen_type.trim(),
         finding_type.trim(),
         Number(finding_qty),
@@ -231,7 +234,7 @@ exports.getMyReports = async (req, res) => {
     const [rows] = await poolIkm.query(
       `SELECT
          id, reporter_name, report_date, area_id, hospital_id,
-         finding_location, linen_type, finding_type, finding_qty,
+         finding_location, ownership_type, linen_type, finding_type, finding_qty,
          attachment_path, status, sending_note,
          process_by, process_by_name, process_note, process_path, process_at,
          completed_by, completed_by_name, completed_note, completed_path, completed_at,
@@ -260,7 +263,7 @@ exports.getReportById = async (req, res) => {
     const [rows] = await poolIkm.query(
       `SELECT
          id, reporter_name, report_date, area_id, hospital_id,
-         finding_location, linen_type, finding_type, finding_qty,
+         finding_location, ownership_type, linen_type, finding_type, finding_qty,
          attachment_path, status, sending_note,
          process_by, process_by_name, process_note, process_path, process_at,
          completed_by, completed_by_name, completed_note, completed_path, completed_at,
@@ -291,7 +294,7 @@ exports.updateReport = async (req, res) => {
     const reportId = req.params.id;
     const {
       reporter_name, report_date, area_id, hospital_id,
-      finding_location, linen_type, finding_type, finding_qty, sending_note
+      finding_location, ownership_type, linen_type, finding_type, finding_qty, sending_note
     } = req.body;
 
     if (!reporter_name?.trim()) return errorResponse(res, 'Nama penemu wajib diisi', 400);
@@ -300,6 +303,8 @@ exports.updateReport = async (req, res) => {
     if (!hospital_id) return errorResponse(res, 'Rumah sakit wajib dipilih', 400);
     if (!finding_location || !['Rumah Sakit', 'IKM'].includes(finding_location))
       return errorResponse(res, 'Lokasi penemuan wajib dipilih', 400);
+    if (!ownership_type || !['hospital', 'rental'].includes(ownership_type))
+      return errorResponse(res, 'Kepemilikan linen wajib dipilih', 400);
     if (!linen_type?.trim()) return errorResponse(res, 'Jenis linen wajib diisi', 400);
     if (!finding_type?.trim()) return errorResponse(res, 'Jenis temuan wajib dipilih', 400);
     if (!finding_qty || isNaN(Number(finding_qty)) || Number(finding_qty) < 1)
@@ -322,12 +327,12 @@ exports.updateReport = async (req, res) => {
     await poolIkm.query(
       `UPDATE tr_linen_report SET
         reporter_name = ?, report_date = ?, area_id = ?, hospital_id = ?,
-        finding_location = ?, linen_type = ?, finding_type = ?,
+        finding_location = ?, ownership_type = ?, linen_type = ?, finding_type = ?,
         finding_qty = ?, attachment_path = ?, sending_note = ?
        WHERE id = ? AND reported_by = ?`,
       [
         reporter_name.trim(), report_date, Number(area_id), Number(hospital_id),
-        finding_location, linen_type.trim(), finding_type.trim(),
+        finding_location, ownership_type, linen_type.trim(), finding_type.trim(),
         Number(finding_qty), attachment_path, sending_note?.trim() || null,
         reportId, employeeId,
       ]
