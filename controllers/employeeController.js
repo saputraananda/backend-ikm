@@ -8,6 +8,7 @@ const ALLOWED_TEXT_FIELDS = [
   'marital_status', 'bank_id', 'bank_account_number',
   'gender', 'birth_place', 'birth_date', 'address', 'ktp_number',
   'phone_number', 'mother_name', 'emergency_contact', 'education_level_id',
+  'private_email', 'major_name'
 ];
 
 /* ── Doc types with their DB path/name column pairs ── */
@@ -39,6 +40,7 @@ const getProfileDetail = async (req, res, next) => {
          me.school_name, me.religion_id, me.education_level_id,
          me.marital_status, me.bank_id, me.bank_account_number,
          me.join_date, me.contract_end_date,
+         me.private_email, me.major_name,
          me.ktp_path, me.ktp_name,
          me.kk_path, me.kk_name,
          me.npwp_path, me.npwp_name,

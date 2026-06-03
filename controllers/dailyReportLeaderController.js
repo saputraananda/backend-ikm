@@ -27,7 +27,7 @@ exports.getAreas = async (req, res) => {
 exports.getEmployees = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT employee_id, full_name FROM mst_employee WHERE company_id = 2 ORDER BY full_name ASC`
+      `SELECT employee_id, full_name FROM mst_employee WHERE company_id = 2 AND exit_date IS NULL ORDER BY full_name ASC`
     );
     return successResponse(res, 'OK', rows);
   } catch (err) {

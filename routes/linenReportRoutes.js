@@ -8,6 +8,7 @@ const ctrl = require('../controllers/linenReportController');
 router.get('/areas',       authMiddleware, ctrl.getAreas);
 router.get('/hospitals',   authMiddleware, ctrl.getHospitals);
 router.get('/leaders',     authMiddleware, ctrl.getLeaders);
+router.get('/employees',   authMiddleware, ctrl.getEmployees);
 
 /* Today check */
 router.get('/check-today', authMiddleware, ctrl.checkTodayReport);

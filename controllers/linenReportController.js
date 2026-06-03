@@ -79,6 +79,25 @@ exports.getLeaders = async (req, res) => {
 };
 
 /**
+ * GET /api/linen-report/employees
+ * Returns all active employees for the reporter name dropdown.
+ */
+exports.getEmployees = async (req, res) => {
+  try {
+    const [employees] = await pool.query(
+      `SELECT employee_id, full_name 
+      FROM mst_employee 
+      WHERE company_id = 2 AND exit_date IS NULL 
+      ORDER BY full_name ASC`
+    );
+    return successResponse(res, 'OK', employees);
+  } catch (err) {
+    console.error('[linenReport] getEmployees', err);
+    return errorResponse(res, 'Terjadi kesalahan server', 500);
+  }
+};
+
+/**
  * GET /api/linen-report/all-reports
  * Returns all linen reports visible to the caller (not restricted to reported_by).
  * Query: ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&reportedBy=<employee_id>
@@ -89,33 +108,42 @@ exports.getAllReports = async (req, res) => {
     if (!employeeId) return errorResponse(res, 'Unauthorized', 401);
 
     const { startDate, endDate, reportedBy } = req.query;
-    let where = 'WHERE 1=1';
-    const params = [];
+    
+    // Hanya ambil laporan dari employee yang selantai dengan user yang sedang login
+    let where = `
+      WHERE lr.reported_by IN (
+        SELECT f1.employee_id 
+        FROM mst_floor f1 
+        JOIN mst_floor f2 ON f1.floor = f2.floor 
+        WHERE f2.employee_id = ?
+      )
+    `;
+    const params = [employeeId];
 
     if (reportedBy) {
-      where += ' AND reported_by = ?';
+      where += ' AND lr.reported_by = ?';
       params.push(Number(reportedBy));
     }
     if (startDate) {
-      where += ' AND report_date >= ?';
+      where += ' AND lr.report_date >= ?';
       params.push(startDate);
     }
     if (endDate) {
-      where += ' AND report_date <= ?';
+      where += ' AND lr.report_date <= ?';
       params.push(endDate);
     }
 
     const [rows] = await poolIkm.query(
       `SELECT
-         id, reporter_name, report_date, area_id, hospital_id,
-         finding_location, ownership_type, linen_type, finding_type, finding_qty,
-         attachment_path, status, sending_note,
-         process_by, process_by_name, process_note, process_path, process_at,
-         completed_by, completed_by_name, completed_note, completed_path, completed_at,
-         reported_by, created_at
-       FROM tr_linen_report
+         lr.id, lr.reporter_name, lr.report_date, lr.area_id, lr.hospital_id,
+         lr.finding_location, lr.ownership_type, lr.linen_type, lr.finding_type, lr.finding_qty,
+         lr.attachment_path, lr.status, lr.sending_note,
+         lr.process_by, lr.process_by_name, lr.process_note, lr.process_path, lr.process_at,
+         lr.completed_by, lr.completed_by_name, lr.completed_note, lr.completed_path, lr.completed_at,
+         lr.reported_by, lr.created_at
+       FROM tr_linen_report lr
        ${where}
-       ORDER BY created_at DESC`,
+       ORDER BY lr.created_at DESC`,
       params
     );
 
