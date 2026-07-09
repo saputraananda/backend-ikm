@@ -30,6 +30,7 @@ const dailyReportRoutes = require('./routes/dailyReportLeaderRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const managementAttendanceRoutes = require('./routes/managementAttendanceRoutes');
 const kasbonRoutes = require('./routes/kasbonRoutes');
+const rewashRoutes = require('./routes/rewashRoutes');
 const errorMiddleware = require('./middleware/errorMiddleware');
 const {
   ATTENDANCE_UPLOAD_DIR, ATTENDANCE_UPLOAD_PUBLIC_PATH,
@@ -82,6 +83,7 @@ app.use('/api/daily-report', dailyReportRoutes);
 app.use('/api/employee', employeeRoutes);
 app.use('/api/management-attendance', managementAttendanceRoutes);
 app.use('/api/kasbon',               kasbonRoutes);
+app.use('/api/rewash',               rewashRoutes);
 
 // SPA fallback — serve index.html for non-API, non-storage routes
 const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
