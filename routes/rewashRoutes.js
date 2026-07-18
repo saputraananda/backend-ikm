@@ -7,6 +7,7 @@ const ctrl = require('../controllers/rewashController');
 router.get('/hospitals',   authMiddleware, ctrl.getHospitals);
 router.get('/employees',   authMiddleware, ctrl.getEmployees);
 router.get('/linens',      authMiddleware, ctrl.getLinens);
+router.get('/check-hospital-report', authMiddleware, ctrl.checkHospitalReport);
 
 /* Reports list */
 router.get('/my-reports',  authMiddleware, ctrl.getMyReports);

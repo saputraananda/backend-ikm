@@ -121,6 +121,27 @@ exports.submitRewash = async (req, res) => {
   try {
     await connection.beginTransaction();
 
+    // Check if report already exists for this hospital in the current 8 AM to 8 AM session
+    const [existingReport] = await connection.query(
+      `SELECT id FROM tr_rewash
+       WHERE hospital_id = ?
+         AND created_at >= CASE
+           WHEN HOUR(NOW()) >= 8 THEN CONCAT(CURDATE(), ' 08:00:00')
+           ELSE CONCAT(DATE_SUB(CURDATE(), INTERVAL 1 DAY), ' 08:00:00')
+         END
+         AND created_at < CASE
+           WHEN HOUR(NOW()) >= 8 THEN CONCAT(DATE_ADD(CURDATE(), INTERVAL 1 DAY), ' 08:00:00')
+           ELSE CONCAT(CURDATE(), ' 08:00:00')
+         END
+       LIMIT 1`,
+      [Number(hospital_id)]
+    );
+
+    if (existingReport.length > 0) {
+      await connection.rollback();
+      return errorResponse(res, 'Rumah sakit ini telah memiliki laporan untuk sesi hari ini. Silakan lengkapi/edit laporan yang sudah ada.', 400);
+    }
+
     // 1. Insert header
     const [headerResult] = await connection.query(
       `INSERT INTO tr_rewash (reporter_name, report_date, hospital_id, notes, reported_by)
@@ -139,6 +160,10 @@ exports.submitRewash = async (req, res) => {
       `INSERT INTO tr_rewash_detail (rewash_id, hospital_linen_id, qty) VALUES ?`,
       [detailValues]
     );
+
+    // Audit CREATE
+    const afterState = await getReportState(connection, rewashId);
+    await logAudit(connection, rewashId, 'CREATE', employeeId, req.user?.full_name, null, afterState);
 
     await connection.commit();
     return successResponse(res, 'Data rewash berhasil disimpan', { id: rewashId }, 201);
@@ -247,17 +272,10 @@ exports.getAllReports = async (req, res) => {
     const employeeId = req.user?.employee_id;
     if (!employeeId) return errorResponse(res, 'Unauthorized', 401);
 
-    const { startDate, endDate, reportedBy } = req.query;
+    const { startDate, endDate, reportedBy, hospitalId } = req.query;
 
-    let where = `
-      WHERE r.reported_by IN (
-        SELECT f1.employee_id
-        FROM mst_floor f1
-        JOIN mst_floor f2 ON f1.floor = f2.floor
-        WHERE f2.employee_id = ?
-      )
-    `;
-    const params = [employeeId];
+    let where = 'WHERE 1=1';
+    const params = [];
 
     if (reportedBy) {
       where += ' AND r.reported_by = ?';
@@ -270,6 +288,10 @@ exports.getAllReports = async (req, res) => {
     if (endDate) {
       where += ' AND r.report_date <= ?';
       params.push(endDate);
+    }
+    if (hospitalId) {
+      where += ' AND r.hospital_id = ?';
+      params.push(Number(hospitalId));
     }
     where += ' AND rd.qty > 0';
 
@@ -356,25 +378,28 @@ exports.updateReport = async (req, res) => {
     return errorResponse(res, 'Data linen rewash wajib diisi', 400);
   }
 
-  // Verify ownership
+  // Verify existence
   const [existing] = await poolIkm.query(
-    `SELECT id FROM tr_rewash WHERE id = ? AND reported_by = ? LIMIT 1`,
-    [Number(id), employeeId]
+    `SELECT id FROM tr_rewash WHERE id = ? LIMIT 1`,
+    [Number(id)]
   );
   if (!existing.length) {
-    return errorResponse(res, 'Laporan tidak ditemukan atau Anda tidak berwenang', 404);
+    return errorResponse(res, 'Laporan tidak ditemukan', 404);
   }
 
   const connection = await poolIkm.getConnection();
   try {
     await connection.beginTransaction();
 
+    // Fetch state before update
+    const beforeState = await getReportState(connection, Number(id));
+
     // 1. Update header
     await connection.query(
       `UPDATE tr_rewash
        SET reporter_name = ?, report_date = ?, hospital_id = ?, notes = ?
-       WHERE id = ? AND reported_by = ?`,
-      [reporter_name.trim(), report_date, Number(hospital_id), notes || null, Number(id), employeeId]
+       WHERE id = ?`,
+      [reporter_name.trim(), report_date, Number(hospital_id), notes || null, Number(id)]
     );
 
     // 2. Upsert detail items — NEVER DELETE
@@ -393,6 +418,10 @@ exports.updateReport = async (req, res) => {
         );
       }
     }
+
+    // Fetch state after update and log audit
+    const afterState = await getReportState(connection, Number(id));
+    await logAudit(connection, Number(id), 'UPDATE', employeeId, req.user?.full_name, beforeState, afterState);
 
     await connection.commit();
     return successResponse(res, 'Laporan rewash berhasil diperbarui');
@@ -415,22 +444,153 @@ exports.deleteReport = async (req, res) => {
 
   const { id } = req.params;
 
-  const [existing] = await poolIkm.query(
-    `SELECT id FROM tr_rewash WHERE id = ? AND reported_by = ? LIMIT 1`,
-    [Number(id), employeeId]
-  );
-  if (!existing.length) {
-    return errorResponse(res, 'Laporan tidak ditemukan atau Anda tidak berwenang', 404);
-  }
-
+  const connection = await poolIkm.getConnection();
   try {
-    await poolIkm.query(
-      `DELETE FROM tr_rewash WHERE id = ? AND reported_by = ?`,
-      [Number(id), employeeId]
+    await connection.beginTransaction();
+
+    const beforeState = await getReportState(connection, Number(id));
+    if (!beforeState) {
+      await connection.rollback();
+      return errorResponse(res, 'Laporan tidak ditemukan', 404);
+    }
+
+    await logAudit(connection, Number(id), 'DELETE', employeeId, req.user?.full_name, beforeState, null);
+
+    await connection.query(
+      `DELETE FROM tr_rewash WHERE id = ?`,
+      [Number(id)]
     );
+
+    await connection.commit();
     return successResponse(res, 'Laporan rewash berhasil dihapus');
   } catch (err) {
+    await connection.rollback();
     console.error('[rewashController] deleteReport', err);
+    return errorResponse(res, 'Terjadi kesalahan server', 500);
+  } finally {
+    connection.release();
+  }
+};
+
+/**
+ * Helper: get report state for auditing
+ */
+async function getReportState(connection, rewashId) {
+  const [headerRows] = await connection.query(
+    `SELECT id, reporter_name, report_date, hospital_id, notes, reported_by, created_at, updated_at
+     FROM tr_rewash WHERE id = ?`,
+    [rewashId]
+  );
+  if (!headerRows.length) return null;
+
+  const [detailRows] = await connection.query(
+    `SELECT id, hospital_linen_id, qty FROM tr_rewash_detail WHERE rewash_id = ?`,
+    [rewashId]
+  );
+
+  return {
+    header: headerRows[0],
+    items: detailRows
+  };
+}
+
+/**
+ * Helper: log audit entry
+ */
+async function logAudit(connection, rewashId, action, employeeId, fullName, beforeData, afterData) {
+  await connection.query(
+    `INSERT INTO tr_rewash_audit (rewash_id, action, changed_by, changed_by_name, before_data, after_data)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      rewashId,
+      action,
+      employeeId,
+      fullName || '',
+      beforeData ? JSON.stringify(beforeData) : null,
+      afterData ? JSON.stringify(afterData) : null
+    ]
+  );
+}
+
+/**
+ * GET /api/rewash/check-hospital-report
+ */
+exports.checkHospitalReport = async (req, res) => {
+  try {
+    const { hospital_id } = req.query;
+    if (!hospital_id) {
+      return errorResponse(res, 'hospital_id wajib diisi', 400);
+    }
+
+    const [rows] = await poolIkm.query(
+      `SELECT
+         r.id, r.reporter_name, r.report_date, r.hospital_id, r.notes, r.reported_by, r.created_at,
+         DATE_FORMAT(r.created_at, '%Y-%m-%d %H:%i:%s') AS created_at_str,
+         h.hospital_name,
+         rd.id AS detail_id,
+         rd.hospital_linen_id,
+         rd.qty,
+         hl.hospital_linen_name,
+         hl.ownership_type,
+         l.linen_name,
+         sz.size_name,
+         c.color_name,
+         m.material_name
+       FROM tr_rewash r
+       JOIN mst_hospital h ON r.hospital_id = h.id
+       JOIN tr_rewash_detail rd ON rd.rewash_id = r.id
+       JOIN mst_hospital_linen hl ON rd.hospital_linen_id = hl.id
+       JOIN mst_linen l ON hl.linen_id = l.id
+       LEFT JOIN mst_size sz ON l.size_id = sz.id
+       LEFT JOIN mst_color c ON l.color_id = c.id
+       LEFT JOIN mst_material m ON l.material_id = m.id
+       WHERE r.hospital_id = ?
+         AND r.created_at >= CASE
+           WHEN HOUR(NOW()) >= 8 THEN CONCAT(CURDATE(), ' 08:00:00')
+           ELSE CONCAT(DATE_SUB(CURDATE(), INTERVAL 1 DAY), ' 08:00:00')
+         END
+         AND r.created_at < CASE
+           WHEN HOUR(NOW()) >= 8 THEN CONCAT(DATE_ADD(CURDATE(), INTERVAL 1 DAY), ' 08:00:00')
+           ELSE CONCAT(CURDATE(), ' 08:00:00')
+         END
+       ORDER BY rd.id ASC`,
+      [Number(hospital_id)]
+    );
+
+    if (rows.length === 0) {
+      return successResponse(res, 'OK', { exists: false });
+    }
+
+    const report = {
+      id: rows[0].id,
+      reporter_name: rows[0].reporter_name,
+      report_date: rows[0].report_date,
+      hospital_id: rows[0].hospital_id,
+      notes: rows[0].notes,
+      reported_by: rows[0].reported_by,
+      created_at: rows[0].created_at,
+      created_at_str: rows[0].created_at_str,
+      hospital_name: rows[0].hospital_name,
+      items: []
+    };
+
+    for (const row of rows) {
+      if (row.qty > 0) {
+        const parts = [row.linen_name, row.size_name, row.color_name, row.material_name].filter(Boolean);
+        report.items.push({
+          id: row.detail_id,
+          hospital_linen_id: row.hospital_linen_id,
+          hospital_linen_name: row.hospital_linen_name,
+          ownership_type: row.ownership_type,
+          linen_name: parts.join(' '),
+          qty: row.qty
+        });
+      }
+    }
+
+    return successResponse(res, 'OK', { exists: true, report });
+  } catch (err) {
+    console.error('[rewashController] checkHospitalReport', err);
     return errorResponse(res, 'Terjadi kesalahan server', 500);
   }
 };
