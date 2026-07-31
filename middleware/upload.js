@@ -40,6 +40,10 @@ const UPLOAD_FOLDERS = Object.freeze({
     subDir: 'kasbon',
     publicPath: '/storage/kasbon'
   },
+  payslip: {
+    subDir: 'payslip',
+    publicPath: '/storage/payslip'
+  },
 });
 
 function resolveUploadTarget(key) {
@@ -79,6 +83,10 @@ const kasbonTarget = resolveUploadTarget('kasbonProof');
 const KASBON_UPLOAD_DIR = kasbonTarget.absoluteDir;
 const KASBON_UPLOAD_PUBLIC_PATH = kasbonTarget.publicPath;
 
+const payslipTarget = resolveUploadTarget('payslip');
+const PAYSLIP_UPLOAD_DIR = payslipTarget.absoluteDir;
+const PAYSLIP_UPLOAD_PUBLIC_PATH = payslipTarget.publicPath;
+
 function ensureDir(dir) {
   try {
     fs.mkdirSync(dir, { recursive: true });
@@ -94,6 +102,7 @@ ensureDir(DAILY_REPORT_UPLOAD_DIR);
 ensureDir(EMPLOYEE_AVATAR_DIR);
 ensureDir(EMPLOYEE_DOC_DIR);
 ensureDir(KASBON_UPLOAD_DIR);
+ensureDir(PAYSLIP_UPLOAD_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -269,4 +278,6 @@ module.exports = {
   KASBON_UPLOAD_DIR,
   KASBON_UPLOAD_PUBLIC_PATH,
   uploadKasbonProof,
+  PAYSLIP_UPLOAD_DIR,
+  PAYSLIP_UPLOAD_PUBLIC_PATH,
 };

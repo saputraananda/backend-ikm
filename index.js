@@ -40,6 +40,7 @@ const {
   EMPLOYEE_AVATAR_DIR, EMPLOYEE_AVATAR_PUBLIC_PATH,
   EMPLOYEE_DOC_DIR, EMPLOYEE_DOC_PUBLIC_PATH,
   KASBON_UPLOAD_DIR, KASBON_UPLOAD_PUBLIC_PATH,
+  PAYSLIP_UPLOAD_DIR, PAYSLIP_UPLOAD_PUBLIC_PATH,
 } = require('./middleware/upload');
 
 const app = express();
@@ -48,7 +49,9 @@ app.use(
   helmet({
     crossOriginEmbedderPolicy: false,
     crossOriginOpenerPolicy: { policy: 'unsafe-none' },
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: false,
+    xFrameOptions: false
   })
 );
 app.use(cors());
@@ -62,6 +65,7 @@ app.use(LEAVE_UPLOAD_PUBLIC_PATH, express.static(LEAVE_UPLOAD_DIR));
 app.use(LINEN_UPLOAD_PUBLIC_PATH, express.static(LINEN_UPLOAD_DIR));
 app.use(DAILY_REPORT_UPLOAD_PUBLIC_PATH, express.static(DAILY_REPORT_UPLOAD_DIR));
 app.use(KASBON_UPLOAD_PUBLIC_PATH,       express.static(KASBON_UPLOAD_DIR));
+app.use(PAYSLIP_UPLOAD_PUBLIC_PATH,      express.static(PAYSLIP_UPLOAD_DIR));
 
 // Dev only — di prod file karyawan ada di waschen, tidak perlu di-serve di sini
 app.use(EMPLOYEE_AVATAR_PUBLIC_PATH, express.static(EMPLOYEE_AVATAR_DIR));
@@ -84,6 +88,7 @@ app.use('/api/employee', employeeRoutes);
 app.use('/api/management-attendance', managementAttendanceRoutes);
 app.use('/api/kasbon',               kasbonRoutes);
 app.use('/api/rewash',               rewashRoutes);
+app.use('/api/payslips',             require('./routes/payslipRoutes'));
 
 // SPA fallback — serve index.html for non-API, non-storage routes
 const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
