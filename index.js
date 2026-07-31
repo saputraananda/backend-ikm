@@ -5,7 +5,10 @@ const fs = require('fs');
 const envPaths = [
   path.join(__dirname, '.env'),
   path.join(process.cwd(), '.env'),
-  path.join(__dirname, '..', '.env')
+  path.join(__dirname, '..', '.env'),
+  path.join(__dirname, '../..', '.env'),
+  path.join(__dirname, '../../..', '.env'),
+  path.join(__dirname, '../../../..', '.env')
 ];
 let envLoaded = false;
 for (const p of envPaths) {
