@@ -1,6 +1,22 @@
 const { poolIkm } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
-const { PAYSLIP_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
+const { PAYSLIP_IS_REMOTE, IKM_PAYSLIP_BASE_URL, PAYSLIP_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
+
+/**
+ * Bangun URL publik untuk file slip gaji.
+ * - Prod (IKM_PAYSLIP_BASE_URL = https://...): gunakan langsung sebagai base URL.
+ * - Dev  (IKM_PAYSLIP_BASE_URL = path lokal): file di-serve via express.static,
+ *   kembalikan relative path /storage/payslip/<file_path>.
+ */
+function buildFileUrl(req, filePath) {
+  if (PAYSLIP_IS_REMOTE) {
+    // Produksi: https://api.waschenalora.com/storage/assets/payslip/<file>
+    const base = IKM_PAYSLIP_BASE_URL.replace(/\/+$/, '');
+    return `${base}/${filePath}`;
+  }
+  // Development: dilayani express.static dari PAYSLIP_UPLOAD_DIR
+  return `${PAYSLIP_UPLOAD_PUBLIC_PATH}/${filePath}`;
+}
 
 /**
  * GET /api/payslips
@@ -34,7 +50,7 @@ exports.getPayslips = async (req, res) => {
     // Map rows to include public file URL
     const data = rows.map(row => ({
       ...row,
-      file_url: `${PAYSLIP_UPLOAD_PUBLIC_PATH}/${row.file_path}`
+      file_url: buildFileUrl(req, row.file_path)
     }));
 
     return successResponse(res, 'Success', data);

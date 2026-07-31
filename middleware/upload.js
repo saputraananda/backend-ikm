@@ -83,9 +83,15 @@ const kasbonTarget = resolveUploadTarget('kasbonProof');
 const KASBON_UPLOAD_DIR = kasbonTarget.absoluteDir;
 const KASBON_UPLOAD_PUBLIC_PATH = kasbonTarget.publicPath;
 
-const payslipTarget = resolveUploadTarget('payslip');
-const PAYSLIP_UPLOAD_DIR = payslipTarget.absoluteDir;
-const PAYSLIP_UPLOAD_PUBLIC_PATH = payslipTarget.publicPath;
+// Payslip dir: bisa path lokal (dev) atau URL publik (prod — tidak perlu static serve)
+const IKM_PAYSLIP_BASE_URL = process.env.IKM_PAYSLIP_BASE_URL || '';
+const PAYSLIP_IS_REMOTE = /^https?:\/\//i.test(IKM_PAYSLIP_BASE_URL);
+const PAYSLIP_UPLOAD_DIR = PAYSLIP_IS_REMOTE
+  ? null  // produksi: tidak di-serve di sini
+  : (path.isAbsolute(IKM_PAYSLIP_BASE_URL)
+      ? IKM_PAYSLIP_BASE_URL
+      : path.join(STORAGE_BASE_DIR, 'payslip'));
+const PAYSLIP_UPLOAD_PUBLIC_PATH = '/storage/payslip';
 
 function ensureDir(dir) {
   try {
@@ -102,7 +108,7 @@ ensureDir(DAILY_REPORT_UPLOAD_DIR);
 ensureDir(EMPLOYEE_AVATAR_DIR);
 ensureDir(EMPLOYEE_DOC_DIR);
 ensureDir(KASBON_UPLOAD_DIR);
-ensureDir(PAYSLIP_UPLOAD_DIR);
+if (PAYSLIP_UPLOAD_DIR && !PAYSLIP_IS_REMOTE) ensureDir(PAYSLIP_UPLOAD_DIR);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -280,4 +286,6 @@ module.exports = {
   uploadKasbonProof,
   PAYSLIP_UPLOAD_DIR,
   PAYSLIP_UPLOAD_PUBLIC_PATH,
+  PAYSLIP_IS_REMOTE,
+  IKM_PAYSLIP_BASE_URL,
 };
