@@ -2,7 +2,22 @@ process.env.TZ = 'Asia/Jakarta';
 
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+const envPaths = [
+  path.join(__dirname, '.env'),
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '..', '.env')
+];
+let envLoaded = false;
+for (const p of envPaths) {
+  if (fs.existsSync(p)) {
+    require('dotenv').config({ path: p });
+    envLoaded = true;
+    break;
+  }
+}
+if (!envLoaded) {
+  require('dotenv').config(); // Fallback default
+}
 
 // Catch-all agar Node tidak mati karena unhandled error
 process.on('uncaughtException', (err) => {
