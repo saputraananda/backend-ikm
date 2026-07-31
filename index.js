@@ -15,12 +15,16 @@ for (const p of envPaths) {
   if (fs.existsSync(p)) {
     require('dotenv').config({ path: p });
     envLoaded = true;
+    console.log(`[ENV] Loaded from: ${p}`);
     break;
   }
 }
 if (!envLoaded) {
   require('dotenv').config(); // Fallback default
+  console.log('[ENV] No .env file found — using process.env directly (Hostinger panel vars)');
 }
+console.log('[ENV] JWT_SECRET loaded:', !!process.env.JWT_SECRET);
+console.log('[ENV] DB_HOST_IKM loaded:', !!process.env.DB_HOST_IKM);
 
 // Catch-all agar Node tidak mati karena unhandled error
 process.on('uncaughtException', (err) => {
