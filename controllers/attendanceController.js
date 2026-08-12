@@ -332,15 +332,29 @@ const deletePunch = async (req, res, next) => {
 
     const workDate = getWorkDate();
 
+    // Check optional photo column existence first
+    const canInPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_in_photo_name');
+    const canOutPhotoName = await hasColumn('tr_attendance_shift_ikm', 'check_out_photo_name');
+
+    let photoName = null;
+
     if (punch_type === 'in') {
       /* Prevent deleting check-in when check-out already exists */
+      const selectCols = ['check_out_time'];
+      if (canInPhotoName) selectCols.push('check_in_photo_name');
+
       const [existing] = await pool.query(
-        `SELECT check_out_time FROM tr_attendance_shift_ikm
+        `SELECT ${selectCols.join(', ')} FROM tr_attendance_shift_ikm
          WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 0 LIMIT 1`,
         [employeeId, workDate, shift_type]
       );
-      if (existing.length > 0 && existing[0].check_out_time) {
-        return errorResponse(res, 'Tidak dapat menghapus absen masuk karena absen keluar sudah tercatat.', 400);
+      if (existing.length > 0) {
+        if (existing[0].check_out_time) {
+          return errorResponse(res, 'Tidak dapat menghapus absen masuk karena absen keluar sudah tercatat.', 400);
+        }
+        if (canInPhotoName) {
+          photoName = existing[0].check_in_photo_name;
+        }
       }
 
       await pool.query(
@@ -358,6 +372,17 @@ const deletePunch = async (req, res, next) => {
         [employeeId, workDate, shift_type]
       );
     } else {
+      if (canOutPhotoName) {
+        const [existing] = await pool.query(
+          `SELECT check_out_photo_name FROM tr_attendance_shift_ikm
+           WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 0 LIMIT 1`,
+          [employeeId, workDate, shift_type]
+        );
+        if (existing.length > 0) {
+          photoName = existing[0].check_out_photo_name;
+        }
+      }
+
       await pool.query(
         `UPDATE tr_attendance_shift_ikm
          SET check_out_time = NULL, check_out_lat = NULL, check_out_lng = NULL,
@@ -365,6 +390,18 @@ const deletePunch = async (req, res, next) => {
          WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 0`,
         [employeeId, workDate, shift_type]
       );
+    }
+
+    if (photoName) {
+      const fs = require('fs');
+      const path = require('path');
+      const { ATTENDANCE_UPLOAD_DIR } = require('../middleware/upload');
+      const filePath = path.join(ATTENDANCE_UPLOAD_DIR, photoName);
+      fs.unlink(filePath, (err) => {
+        if (err && err.code !== 'ENOENT') {
+          console.error(`Gagal menghapus file foto absensi: ${filePath}`, err);
+        }
+      });
     }
 
     return successResponse(res, 'Absensi berhasil dihapus, silakan absen ulang.');
