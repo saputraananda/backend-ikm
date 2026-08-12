@@ -38,7 +38,6 @@ process.on('unhandledRejection', (reason) => {
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
 
 const authRoutes = require('./routes/authRoutes');
 const locationRoutes = require('./routes/locationRoutes');
@@ -77,7 +76,6 @@ app.use(
   })
 );
 app.use(cors());
-app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
