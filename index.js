@@ -79,6 +79,14 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Request gagal (4xx/5xx) → hapus file yang sudah ditulis multer agar tidak nyangkut di server
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    if (res.statusCode >= 400 && req.file?.path) fs.unlink(req.file.path, () => {});
+  });
+  next();
+});
+
 // Expose uploaded selfie proofs (for both local/prod base dir)
 app.use(ATTENDANCE_UPLOAD_PUBLIC_PATH, express.static(ATTENDANCE_UPLOAD_DIR));
 app.use(LEAVE_UPLOAD_PUBLIC_PATH, express.static(LEAVE_UPLOAD_DIR));

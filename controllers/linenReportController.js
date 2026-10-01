@@ -2,17 +2,14 @@ const path = require('path');
 const fs = require('fs');
 const { pool, poolIkm } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
-const { LINEN_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
+const { LINEN_UPLOAD_PUBLIC_PATH, LINEN_UPLOAD_DIR } = require('../middleware/upload');
 
 /* ───────────────────────────────────────────
    Helper: delete attachment file from disk
 ─────────────────────────────────────────── */
 const deleteAttachment = (relPath) => {
   if (!relPath) return;
-  const fullPath = path.join(__dirname, '..', 'public', relPath);
-  try {
-    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
-  } catch (_) {}
+  fs.unlink(path.join(LINEN_UPLOAD_DIR, path.basename(relPath)), () => {});
 };
 
 /**

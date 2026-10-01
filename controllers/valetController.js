@@ -1,6 +1,6 @@
 const { poolIkm: pool } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
-const { ATTENDANCE_UPLOAD_PUBLIC_PATH } = require('../middleware/upload');
+const { ATTENDANCE_UPLOAD_PUBLIC_PATH, ATTENDANCE_UPLOAD_DIR } = require('../middleware/upload');
 
 /* ── Shared helpers ─────────────────────────────────────────────── */
 /* Always compute WIB (UTC+7) via explicit offset – avoids relying on process.env.TZ */
@@ -334,13 +334,15 @@ const deletePunch = async (req, res, next) => {
 
     const workDate = getWorkDate();
 
+    const [existing] = await pool.query(
+      `SELECT check_out_time, check_in_photo_name, check_out_photo_name FROM tr_attendance_shift_ikm
+       WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 1 LIMIT 1`,
+      [employeeId, workDate, shift_type]
+    );
+    const photoName = existing[0]?.[punch_type === 'in' ? 'check_in_photo_name' : 'check_out_photo_name'];
+
     if (punch_type === 'in') {
       /* Prevent deleting check-in when check-out already exists */
-      const [existing] = await pool.query(
-        `SELECT check_out_time FROM tr_attendance_shift_ikm
-         WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 1 LIMIT 1`,
-        [employeeId, workDate, shift_type]
-      );
       if (existing.length > 0 && existing[0].check_out_time) {
         return errorResponse(res, 'Tidak dapat menghapus absen masuk karena absen keluar sudah tercatat.', 400);
       }
@@ -367,6 +369,10 @@ const deletePunch = async (req, res, next) => {
          WHERE employee_id = ? AND work_date = ? AND shift_type = ? AND is_valet = 1`,
         [employeeId, workDate, shift_type]
       );
+    }
+
+    if (photoName) {
+      require('fs').unlink(require('path').join(ATTENDANCE_UPLOAD_DIR, require('path').basename(photoName)), () => {});
     }
 
     return successResponse(res, 'Absensi berhasil dihapus, silakan absen ulang.');

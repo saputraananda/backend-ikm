@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { pool } = require('../db/pool');
 const { successResponse, errorResponse } = require('../utils/response');
 const { EMPLOYEE_AVATAR_PUBLIC_PATH, EMPLOYEE_DOC_PUBLIC_PATH } = require('../middleware/upload');
@@ -136,11 +138,20 @@ const uploadDoc = async (req, res, next) => {
 
     const fileName = req.file.filename;
 
+    const [[old]] = await pool.query(
+      `SELECT ${nameCol} AS name FROM mst_employee WHERE employee_id = ?`, [employeeId]
+    );
+
     await pool.query(
       `UPDATE mst_employee SET ${pathCol} = ?, ${nameCol} = ?, updated_at = NOW()
        WHERE employee_id = ?`,
       [publicPath, fileName, employeeId]
     );
+
+    // File lama diganti → hapus dari disk
+    if (old?.name && old.name !== fileName) {
+      fs.unlink(path.join(path.dirname(req.file.path), path.basename(old.name)), () => {});
+    }
 
     const fileUrl = `${publicPath}/${encodeURIComponent(fileName)}`;
 
