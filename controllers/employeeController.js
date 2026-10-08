@@ -8,7 +8,7 @@ const { EMPLOYEE_AVATAR_PUBLIC_PATH, EMPLOYEE_DOC_PUBLIC_PATH } = require('../mi
 const ALLOWED_TEXT_FIELDS = [
   'join_date', 'contract_end_date', 'school_name', 'religion_id',
   'marital_status', 'bank_id', 'bank_account_number',
-  'gender', 'birth_place', 'birth_date', 'address', 'ktp_number',
+  'gender', 'birth_place', 'birth_date', 'blood_type', 'address', 'ktp_number',
   'phone_number', 'mother_name', 'emergency_contact', 'education_level_id',
   'private_email', 'major_name'
 ];
@@ -37,7 +37,7 @@ const getProfileDetail = async (req, res, next) => {
     const [rows] = await pool.query(
       `SELECT
          me.employee_id, me.employee_code, me.full_name, me.gender,
-         me.birth_place, me.birth_date, me.address, me.ktp_number,
+         me.birth_place, me.birth_date, me.blood_type, me.address, me.ktp_number,
          me.phone_number, me.mother_name, me.emergency_contact,
          me.school_name, me.religion_id, me.education_level_id,
          me.marital_status, me.bank_id, me.bank_account_number,
@@ -93,11 +93,16 @@ const updateProfile = async (req, res, next) => {
     const vals = [];
 
     for (const field of ALLOWED_TEXT_FIELDS) {
-      if (Object.prototype.hasOwnProperty.call(body, field)) {
-        sets.push(`${field} = ?`);
-        /* Empty string → NULL for date/numeric columns */
-        vals.push(body[field] === '' ? null : body[field]);
+      if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
+      let value = body[field] === '' ? null : body[field];
+      if (field === 'blood_type' && value != null) {
+        value = String(value).trim().toUpperCase().replace(/\s+/g, '');
+        if (!/^(A|B|AB|O)[+-]?$/.test(value)) {
+          return errorResponse(res, 'Golongan darah tidak valid. Contoh: A, B, AB, O, atau dengan +/−.', 400);
+        }
       }
+      sets.push(`${field} = ?`);
+      vals.push(value);
     }
 
     if (sets.length === 0)

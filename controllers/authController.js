@@ -103,6 +103,7 @@ const profile = async (req, res, next) => {
         me.gender,
         me.birth_place,
         me.birth_date,
+        me.blood_type,
         me.address,
         me.phone_number,
         me.company_id,
